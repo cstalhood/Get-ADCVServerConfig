@@ -469,7 +469,7 @@ do {
             $promptString = "Select one or more of the following Virtual Servers for configuration extraction:`n`n"
             $promptString += "Virtual Server Filter = $vserver`n`n"
             $promptString += "   Num   Type        VIP          Name`n"
-            $maxLength = ($vservers | sort length -desc | select -first 1).length
+            $maxLength = ($vservers | Sort-Object length -desc | select -first 1).length
             $promptString += "  -----  ----  " + ("-" * 15) + "  " + ("-" * $maxLength) + "`n"
             write-host $promptString
             foreach ($vserverOption in $vservers) {
@@ -612,7 +612,7 @@ if ($nsObjects."cs vserver") {
             addNSObject "cs vserver" ($backupVServers)
             $nsObjects."cs vserver" += $currentVServers
         }
-        addNSObject "lb vserver" (getNSObjects $vserverconfig "lb vserver" "-targetLBVserver")2
+        addNSObject "lb vserver" (getNSObjects $vserverconfig "lb vserver" "-targetLBVserver")
     }
 }
 
@@ -1988,7 +1988,7 @@ if ($NSObjects."stream identifier") {
 
 #cls
 "`nExtracted Objects"
-$NSObjects.GetEnumerator() | sort -Property Name
+$NSObjects.GetEnumerator() | Sort-Object -Property Name
 
 write-host "`nBuilding Config...`n
 "
