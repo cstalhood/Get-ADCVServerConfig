@@ -31,6 +31,7 @@ param (
 
 # Change Log
 # ----------
+# 2018 Nov 16 - support for MacOS popups for nsconf and saveas. Switch for sort to Sort-object to support MacOs & Powershell core 6
 # 2018 Nov 5 - check text editor existince (h/t Bjørn-Kåre Flister)
 # 2018 Nov 5 - switch to extract CS vServer for selected LB/VPN/AAA vServer (h/t Bjørn-Kåre Flister)
 # 2018 Sep 19 - fixed SAML Policy and SAML Action
