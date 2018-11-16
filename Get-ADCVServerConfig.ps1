@@ -16,9 +16,9 @@ param (
     # If you intend to batch import to NetScaler, then no spaces or capital letters in the file name.
     # If set to "screen", then output will go to screen.
     # If set to "", then the script will prompt for a file. Clicking cancel will output to the screen.
-    #[string]$outputFile = "",
+    [string]$outputFile = "",
     #[string]$outputFile = "screen",
-    [string]$outputFile = "$env:userprofile\Downloads\nsconfig.conf",
+    #[string]$outputFile = "$env:userprofile\Downloads\nsconfig.conf",
     #[string]$outputFile = "$env:HOME/Downloads/nsconfig.conf",
 
     # Optional text editor to open saved output file - text editor should handle UNIX line endings (e.g. Wordpad or Notepad++)
@@ -82,6 +82,7 @@ Function Get-OutputFile($initialDirectory)
             $DefaultLocation = 'default location "'+$initialDirectory+'"'
         }
         $filename = (('set theName to POSIX path of (choose file name '+$($DefaultName)+' '+$($DefaultLocation)+' with prompt "Save NetScaler documentation file as")' | osascript -s s) -split '"')[1]
+        $filename
     }else{
         [System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms") | Out-Null
         $SaveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
