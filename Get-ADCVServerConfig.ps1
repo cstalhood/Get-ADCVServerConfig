@@ -1,4 +1,4 @@
-# Citrix NetScaler ADC Virtual Server Configuration Extractor
+# NetScaler Configuration Extractor
 # Note: This script works on Windows 10, but the regex match group commands fail on Windows 7
 
 param (
@@ -25,11 +25,11 @@ param (
 
     # Optional get CSW vserver Binds for selected LB and/or VPN virtual server
     [switch]$cswBind
-	#[switch]$cswBind = $true
 )
 
 # Change Log
 # ----------
+# 2018 Nov 17 - changed vServer selection to Out-GridView (GUI)
 # 2018 Nov 5 - check text editor existince (h/t Bjørn-Kåre Flister)
 # 2018 Nov 5 - switch to extract CS vServer for selected LB/VPN/AAA vServer (h/t Bjørn-Kåre Flister)
 # 2018 Sep 19 - fixed SAML Policy and SAML Action
@@ -463,7 +463,29 @@ do {
 
         $selected = @("") * ($vservers.length)
     
-        do {
+        # Grid View 
+        $vserverObjects = @()
+        $vserverObjects = for ($x = 0; $x -lt $vservers.length; $x++) {
+            [PSCustomObject] @{
+                Type = $vserverTypes[$x]
+                Name = $vservers[$x]
+                }
+        }
+        "Use Grid View window to select Virtual Servers`n"
+        $vserverObjects = $vserverObjects | Out-GridView -Title "Ctrl+Select Multiple Virtual Servers to extract" -PassThru
+        if (!$vserverObjects) { exit }
+        $vservers = @()
+        foreach ($vserverObject in $vserverObjects) {
+            if ($vserverObject.Type -eq "aaa") {
+                $vserverObject.Type = "authentication"
+            }
+            addNSObject ($vserverObject.Type + " vserver") $vserverObject.Name
+            $vservers += $vserverObject.Name
+        }
+        $selectionDone = $true
+
+        # CLI Menu Selection
+        <# do {
             $count = 1
             cls
             $promptString = "Select one or more of the following Virtual Servers for configuration extraction:`n`n"
@@ -528,10 +550,6 @@ do {
             }
         } while ($entry -and $entry -ne "")
 
-        # Run the Get-Output function to ask the user where to save the NetScaler documentation file
-        if (!$outputFile) { $outputFile = Get-OutputFile $outputfile }
-
-
         $vserversSelected = @()
         for ($x = 0; $x -lt ($selected.length); $x++) {
             $vserverTypes = $vserverTypes -replace "aaa", "authentication"
@@ -542,12 +560,16 @@ do {
             }
         }
     
-        $vservers = $vserversSelected
+        $vservers = $vserversSelected #>
     }
     $firstLoop = $false
 } while (!$selectionDone)
 
 if (!$vservers) { exit }
+
+
+# Run the Get-Output function to ask the user where to save the NetScaler documentation file
+if (!$outputFile) { $outputFile = Get-OutputFile $outputfile }
 
 
 "`nLooking for objects associated with selected vServers: `n" + ($vservers -join "`n") + "`n"
@@ -1993,9 +2015,9 @@ $NSObjects.GetEnumerator() | sort -Property Name
 write-host "`nBuilding Config...`n
 "
 if ($outputFile -and ($outputFile -ne "screen")) {
-    "# Extracted Config for $vservers`n" | out-file $outputFile
+    "# Extracted Config for: " + ($vservers -join ", ") + "`n`n" | out-file $outputFile
 } else {
-    "# Extracted Config for $vservers`n" 
+    "# Extracted Config for: " + ($vservers -join ", ") + "`n`n"
 }
 
 # DNS
@@ -2136,10 +2158,10 @@ if ($NSObjects."authentication policy" ) { outputObjectConfig "Advanced Authenti
 if ($NSObjects."authentication loginSchema" ) { outputObjectConfig "Login Schemas" "authentication loginSchema" }
 if ($NSObjects."authentication loginSchemaPolicy" ) { outputObjectConfig "Login Schema Policies" "authentication loginSchemaPolicy" }
 if ($NSObjects."authentication policylabel" ) { outputObjectConfig "Authentication Policy Labels" "authentication policylabel" }
-if ($NSObjects."authentication authnProfile" ) { outputObjectConfig "Authentication Profiles" "authentication authnProfile" }
 if ($NSObjects."tm sessionAction" ) { outputObjectConfig "AAA Session Profiles" "tm sessionAction" }
 if ($NSObjects."tm sessionPolicy" ) { outputObjectConfig "AAA Session Policies" "tm sessionPolicy" }
 if ($NSObjects."authentication vserver" ) { outputObjectConfig "Authentication Virtual Servers" "authentication vserver" }
+if ($NSObjects."authentication authnProfile" ) { outputObjectConfig "Authentication Profiles" "authentication authnProfile" }
 
 
 # Load Balancing output
