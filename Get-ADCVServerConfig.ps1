@@ -30,6 +30,7 @@ param (
 
 # Change Log
 # ----------
+# 2018 Nov 19 - MacOS: added List Dialog to select vServers. fix: dialogfocus (BKF)
 # 2018 Nov 17 - changed vServer selection to Out-GridView (GUI)
 # 2018 Nov 16 - support for MacOS popups for nsconf and saveas. Switch for sort to Sort-object to support MacOs & Powershell core 6
 # 2018 Nov 5 - check text editor existince (h/t Bjørn-Kåre Flister)
@@ -59,7 +60,7 @@ cls
 Function Get-InputFile($initialDirectory)
 {
     if ($IsMacOS){
-        $filename = (('set fileName to POSIX path of (choose file with prompt "NetScaler documentation file")' | osascript -s s) -split '"')[1]
+        $filename = (('tell application "SystemUIServer"'+"`n"+'activate'+"`n"+'set fileName to POSIX path of (choose file with prompt "NetScaler documentation file")'+"`n"+'end tell' | osascript -s s) -split '"')[1]
         if ([String]::IsNullOrEmpty($filename)){break}else{$filename}
     }else{
         [System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms") | Out-Null
@@ -81,7 +82,7 @@ Function Get-OutputFile($initialDirectory)
         if ($initialDirectory){
             $DefaultLocation = 'default location "'+$initialDirectory+'"'
         }
-        $filename = (('set theName to POSIX path of (choose file name '+$($DefaultName)+' '+$($DefaultLocation)+' with prompt "Save NetScaler documentation file as")' | osascript -s s) -split '"')[1]
+        $filename = (('tell application "SystemUIServer"'+"`n"+'activate'+"`n"+'set theName to POSIX path of (choose file name '+$($DefaultName)+' '+$($DefaultLocation)+' with prompt "Save NetScaler documentation file as")'+"`n"+'end tell' | osascript -s s) -split '"')[1]
         $filename
     }else{
         [System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms") | Out-Null
@@ -488,8 +489,24 @@ do {
                 Name = $vservers[$x]
                 }
         }
-        "Use Grid View window to select Virtual Servers`n"
-        $vserverObjects = $vserverObjects | Out-GridView -Title "Ctrl+Select Multiple Virtual Servers to extract" -PassThru
+        if ($IsMacOS){
+            "Use Listbox window to select Virtual Servers`n"
+            $vserverlist = $vservers | Foreach-object{,($_.trim('"') )}
+            $vserverlist = (('tell application "SystemUIServer"'+"`n"+'activate'+"`n"+'set vserver to (choose from list  {"'+($vserverlist -join '","')+'"} with prompt "Command+Select Multiple Virtual Servers to extract" with multiple selections allowed)'+"`n"+'end tell' | osascript -s s) -replace ', ',',')
+            $vserverObjects = @()
+            [regex]::Matches($vserverlist, '(?:([\w\s]+))') | %{
+                if ($_.value -match ' '){$vservername = '"'+$_.value+'"'}
+                else {$vservername = $_.value}
+                $x = $vservers.IndexOf($vservername)
+                $vserverObjects += [PSCustomObject] @{
+                    Type = $vserverTypes[$x]
+                    Name = $vservers[$x]
+                    }
+            }
+        } else {
+            "Use Grid View window to select Virtual Servers`n"
+            $vserverObjects = $vserverObjects | Out-GridView -Title "Ctrl+Select Multiple Virtual Servers to extract" -PassThru
+        }
         if (!$vserverObjects) { exit }
         $vservers = @()
         foreach ($vserverObject in $vserverObjects) {
