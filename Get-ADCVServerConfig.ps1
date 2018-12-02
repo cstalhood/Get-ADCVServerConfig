@@ -377,14 +377,16 @@ function outputnFactorPolicies ($bindingType, $indent) {
         $goto = $policyBinding | select-string -Pattern ('-gotoPriorityExpression (\S+)') | % {$_.Matches.Groups[1].value}
         $loginSchemaPolicy = $config -match '^add authentication loginSchemaPolicy ' + $policy + " "
         if ($loginSchemaPolicy) {
-            $loginSchema = $loginSchemaPolicy | select-string -Pattern ('-action (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value}
+            $loginSchemaAction = $loginSchemaPolicy | select-string -Pattern ('-action (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value}
             $rule = $loginSchemaPolicy | select-string -Pattern ('-rule (.*?) -action') | % {$_.Matches.Groups[1].value}
             $matchedConfig += $linePrefix + ($spacing * $indent) + "Login Schema Policy = " + $policy
             $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Priority = " + $priority
             $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Login Policy Rule = " + $rule
-            $loginSchemaAction = $config -match '^add authentication loginSchema ' + $loginSchema + " "
-            $loginSchemaXML = $loginSchemaAction | select-string -Pattern ('-authenticationSchema (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value}
-            $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Login Schema XML = " + $loginSchemaXML
+            $loginSchemaProfile = $config -match '^add authentication loginSchema ' + $loginSchemaAction + " "
+            if ($loginSchemaProfile) {
+                $loginSchemaXML = $loginSchemaProfile | select-string -Pattern ('-authenticationSchema (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value}
+                $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Login Schema XML = " + $loginSchemaXML
+            }
         }
         $authPolicy = $config -match '^add authentication Policy ' + $policy
         if ($authPolicy) {
@@ -465,7 +467,7 @@ function outputObjectConfig ($header, $NSObjectKey, $NSObjectType, $explainText)
             $indent = 0
             $matchedConfig += $linePrefix + "nFactor Visualizer "
             $matchedConfig += $linePrefix + "------------------ "
-            $matchedConfig += $linePrefix + ($spacing * $indent) + "aaa vserver: " + $aaavServer
+            $matchedConfig += $linePrefix + ($spacing * $indent) + "AAA vserver: " + $aaavServer
             $matchedConfig += outputnFactorPolicies ("authentication vserver " + $aaavServer) 1
             $matchedConfig += "`n"
         }
