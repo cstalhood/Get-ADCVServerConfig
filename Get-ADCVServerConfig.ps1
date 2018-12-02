@@ -16,9 +16,10 @@ param (
     # If you intend to batch import to NetScaler, then no spaces or capital letters in the file name.
     # If set to "screen", then output will go to screen.
     # If set to "", then the script will prompt for a file. Clicking cancel will output to the screen.
-    #$outputFile = ""
-    #$outputFile = "screen"
+    #[string]$outputFile = "",
+    #[string]$outputFile = "screen",
     [string]$outputFile = "$env:userprofile\Downloads\nsconfig.conf",
+    #[string]$outputFile = "$env:HOME/Downloads/nsconfig.conf",
 
     # Optional text editor to open saved output file - text editor should handle UNIX line endings (e.g. Wordpad or Notepad++)
     [string]$textEditor = "c:\Program Files (x86)\Notepad++\notepad++.exe",
@@ -30,7 +31,9 @@ param (
 # Change Log
 # ----------
 # 2018 Dec 2 - added nFactor Visualizer for AAA vServers
+# 2018 Nov 19 - MacOS: added List Dialog to select vServers. fix: dialogfocus (BKF)
 # 2018 Nov 17 - changed vServer selection to Out-GridView (GUI)
+# 2018 Nov 16 - support for MacOS popups for nsconf and saveas. Switch for sort to Sort-object to support MacOs & Powershell core 6
 # 2018 Nov 5 - check text editor existince (h/t Bjørn-Kåre Flister)
 # 2018 Nov 5 - switch to extract CS vServer for selected LB/VPN/AAA vServer (h/t Bjørn-Kåre Flister)
 # 2018 Sep 19 - fixed SAML Policy and SAML Action
@@ -57,25 +60,39 @@ cls
 #  The NetScaler config file can be found in the System > Diagnostics > Running Configuration location in the GUI
 Function Get-InputFile($initialDirectory)
 {
-    [System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms") | Out-Null
-    $OpenFileDialog = New-Object System.Windows.Forms.OpenFileDialog
-    $OpenFileDialog.Title = "Open NetScaler Config"
-    $OpenFileDialog.initialDirectory = $initialDirectory
-    $OpenFileDialog.filter = "NetScaler Config (*.conf)| *.conf|All files (*.*)|*.*"
-    $OpenFileDialog.ShowDialog() | Out-Null
-    $OpenFileDialog.filename
+    if ($IsMacOS){
+        $filename = (('tell application "SystemUIServer"'+"`n"+'activate'+"`n"+'set fileName to POSIX path of (choose file with prompt "NetScaler documentation file")'+"`n"+'end tell' | osascript -s s) -split '"')[1]
+        if ([String]::IsNullOrEmpty($filename)){break}else{$filename}
+    }else{
+        [System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms") | Out-Null
+        $OpenFileDialog = New-Object System.Windows.Forms.OpenFileDialog
+        $OpenFileDialog.Title = "Open NetScaler Config"
+        $OpenFileDialog.initialDirectory = $initialDirectory
+        $OpenFileDialog.filter = "NetScaler Config (*.conf)| *.conf|All files (*.*)|*.*"
+        $OpenFileDialog.ShowDialog() | Out-Null
+        $OpenFileDialog.filename
+    }
 }
 
 #  Function to prompt the user to save the output file
 Function Get-OutputFile($initialDirectory)
 {
-    [System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms") | Out-Null
-    $SaveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
-    $SaveFileDialog.Title = "Save Extracted Config"
-    $SaveFileDialog.initialDirectory = $initialDirectory
-    $SaveFileDialog.filter = "NetScaler Config File (*.conf)| *.conf|All files (*.*)|*.*"
-    $SaveFileDialog.ShowDialog() | Out-Null
-    $SaveFileDialog.filename
+    if ($IsMacOS){
+        $DefaultName = 'default name "nsconfig.conf"'
+        if ($initialDirectory){
+            $DefaultLocation = 'default location "'+$initialDirectory+'"'
+        }
+        $filename = (('tell application "SystemUIServer"'+"`n"+'activate'+"`n"+'set theName to POSIX path of (choose file name '+$($DefaultName)+' '+$($DefaultLocation)+' with prompt "Save NetScaler documentation file as")'+"`n"+'end tell' | osascript -s s) -split '"')[1]
+        $filename
+    }else{
+        [System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms") | Out-Null
+        $SaveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
+        $SaveFileDialog.Title = "Save Extracted Config"
+        $SaveFileDialog.initialDirectory = $initialDirectory
+        $SaveFileDialog.filter = "NetScaler Config File (*.conf)| *.conf|All files (*.*)|*.*"
+        $SaveFileDialog.ShowDialog() | Out-Null
+        $SaveFileDialog.filename
+    }
 }
 
 
@@ -541,8 +558,24 @@ do {
                 Name = $vservers[$x]
                 }
         }
-        "Use Grid View window to select Virtual Servers`n"
-        $vserverObjects = $vserverObjects | Out-GridView -Title "Ctrl+Select Multiple Virtual Servers to extract" -PassThru
+        if ($IsMacOS){
+            "Use Listbox window to select Virtual Servers`n"
+            $vserverlist = $vservers | Foreach-object{,($_.trim('"') )}
+            $vserverlist = (('tell application "SystemUIServer"'+"`n"+'activate'+"`n"+'set vserver to (choose from list  {"'+($vserverlist -join '","')+'"} with prompt "Command+Select Multiple Virtual Servers to extract" with multiple selections allowed)'+"`n"+'end tell' | osascript -s s) -replace ', ',',')
+            $vserverObjects = @()
+            [regex]::Matches($vserverlist, '(?:([\w\s]+))') | %{
+                if ($_.value -match ' '){$vservername = '"'+$_.value+'"'}
+                else {$vservername = $_.value}
+                $x = $vservers.IndexOf($vservername)
+                $vserverObjects += [PSCustomObject] @{
+                    Type = $vserverTypes[$x]
+                    Name = $vservers[$x]
+                    }
+            }
+        } else {
+            "Use Grid View window to select Virtual Servers`n"
+            $vserverObjects = $vserverObjects | Out-GridView -Title "Ctrl+Select Multiple Virtual Servers to extract" -PassThru
+        }
         if (!$vserverObjects) { exit }
         $vservers = @()
         foreach ($vserverObject in $vserverObjects) {
@@ -561,7 +594,7 @@ do {
             $promptString = "Select one or more of the following Virtual Servers for configuration extraction:`n`n"
             $promptString += "Virtual Server Filter = $vserver`n`n"
             $promptString += "   Num   Type        VIP          Name`n"
-            $maxLength = ($vservers | sort length -desc | select -first 1).length
+            $maxLength = ($vservers | sort-object length -desc | select -first 1).length
             $promptString += "  -----  ----  " + ("-" * 15) + "  " + ("-" * $maxLength) + "`n"
             write-host $promptString
             foreach ($vserverOption in $vservers) {
@@ -2080,7 +2113,7 @@ if ($NSObjects."stream identifier") {
 
 #cls
 "`nExtracted Objects"
-$NSObjects.GetEnumerator() | sort -Property Name
+$NSObjects.GetEnumerator() | sort-object -Property Name
 
 write-host "`nBuilding Config...`n
 "
