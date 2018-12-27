@@ -30,6 +30,7 @@ param (
 
 # Change Log
 # ----------
+# 2018 Dec 27 - fix aaa tm trafficpolicy/action aaa kcdAccount output (BKF)
 # 2018 Dec 2 - added nFactor Visualizer for AAA vServers
 # 2018 Nov 19 - MacOS: added List Dialog to select vServers. fix: dialogfocus (BKF)
 # 2018 Nov 17 - changed vServer selection to Out-GridView (GUI)
@@ -1768,7 +1769,7 @@ if ($NSObjects."tm trafficPolicy") {
 
 
 # Get KCD Accounts and SSO Profiles from AAA Traffic Actions
-if ($NSObjects."vpn trafficAction") {
+if ($NSObjects."tm trafficAction") {
     foreach ($profile in $NSObjects."tm trafficAction") {
         addNSObject "aaa kcdAccount" (getNSObjects ($config -match "tm trafficAction $profile ") "aaa kcdAccount" "-kcdAccount")
         addNSObject "tm formSSOAction" (getNSObjects ($config -match "tm trafficAction $profile ") "tm formSSOAction" "-formSSOAction")
@@ -2267,7 +2268,8 @@ if ($NSObjects."tm sessionAction" ) { outputObjectConfig "AAA Session Profiles" 
 if ($NSObjects."tm sessionPolicy" ) { outputObjectConfig "AAA Session Policies" "tm sessionPolicy" }
 if ($NSObjects."authentication vserver" ) { outputObjectConfig "Authentication Virtual Servers" "authentication vserver" }
 if ($NSObjects."authentication authnProfile" ) { outputObjectConfig "Authentication Profiles" "authentication authnProfile" }
-
+if ($NSObjects."tm trafficAction" ) { outputObjectConfig "AAA Traffic Profiles" "tm trafficAction" }
+if ($NSObjects."tm trafficPolicy" ) { outputObjectConfig "AAA Traffic Policies" "tm trafficPolicy" }
 
 # Load Balancing output
 if ($NSObjects."lb parameter" ) { outputObjectConfig "Load Balancing Global Parameters" "lb parameter" "raw" }
