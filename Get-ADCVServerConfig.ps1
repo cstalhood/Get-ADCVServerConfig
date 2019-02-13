@@ -2268,6 +2268,7 @@ if ($NSObjects."tm sessionAction" ) { outputObjectConfig "AAA Session Profiles" 
 if ($NSObjects."tm sessionPolicy" ) { outputObjectConfig "AAA Session Policies" "tm sessionPolicy" }
 if ($NSObjects."authentication vserver" ) { outputObjectConfig "Authentication Virtual Servers" "authentication vserver" }
 if ($NSObjects."authentication authnProfile" ) { outputObjectConfig "Authentication Profiles" "authentication authnProfile" }
+if ($NSObjects."tm formSSOAction" ) { outputObjectConfig "AAA Form SSO Profiles" "tm formSSOAction" }
 if ($NSObjects."tm trafficAction" ) { outputObjectConfig "AAA Traffic Profiles" "tm trafficAction" }
 if ($NSObjects."tm trafficPolicy" ) { outputObjectConfig "AAA Traffic Policies" "tm trafficPolicy" }
 
@@ -2300,6 +2301,7 @@ if ($NSObjects."vpn clientlessAccessPolicy" ) { outputObjectConfig "NetScaler Ga
 if ($NSObjects."rdp clientprofile" ) { outputObjectConfig "NetScaler Gateway RDP Profiles" "rdp clientprofile" }
 if ($NSObjects."vpn pcoipProfile" ) { outputObjectConfig "NetScaler Gateway PCoIP Profiles" "vpn pcoipProfile" }
 if ($NSObjects."vpn pcoipVserverProfile" ) { outputObjectConfig "NetScaler Gateway VServer PCoIP Profiles" "vpn pcoipVserverProfile" }
+if ($NSObjects."vpn formSSOAction" ) { outputObjectConfig "NetScaler Gateway Form SSO Profiles" "vpn formSSOAction" }
 if ($NSObjects."vpn trafficAction" ) { outputObjectConfig "NetScaler Gateway Traffic Profiles" "vpn trafficAction" }
 if ($NSObjects."vpn trafficPolicy" ) { outputObjectConfig "NetScaler Gateway Traffic Policies" "vpn trafficPolicy" }
 if ($NSObjects."vpn alwaysONProfile" ) { outputObjectConfig "NetScaler Gateway AlwaysON Profiles" "vpn alwaysONProfile" }
