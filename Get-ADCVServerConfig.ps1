@@ -559,6 +559,7 @@ do {
             [PSCustomObject] @{
                 Type = $vserverTypes[$x]
                 Name = $vservers[$x]
+                VIP = $VIPs[$x]
                 }
         }
         if ($IsMacOS){
