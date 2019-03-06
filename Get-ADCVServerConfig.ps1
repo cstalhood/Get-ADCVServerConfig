@@ -30,6 +30,7 @@ param (
 
 # Change Log
 # ----------
+# 2019 Mar 6 - fixed Visualizer substring match, and added emailAction
 # 2018 Dec 27 - fix aaa tm trafficpolicy/action aaa kcdAccount output (BKF)
 # 2018 Dec 2 - added nFactor Visualizer for AAA vServers
 # 2018 Nov 19 - MacOS: added List Dialog to select vServers. fix: dialogfocus (BKF)
@@ -389,7 +390,7 @@ function outputnFactorPolicies ($bindingType, $indent) {
                 $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Login Schema XML = " + $loginSchemaXML
             }
         }
-        $authPolicy = $config -match '^add authentication Policy ' + $policy
+        $authPolicy = $config -match '^add authentication Policy ' + $policy + ' '
         if ($authPolicy) {
             $authAction = $authPolicy | select-string -Pattern ('-action (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value}
             $authActionConfig = $config -match '^add authentication \w+?Action ' + $authAction + " "
@@ -1430,6 +1431,7 @@ if ($NSObjects."authentication policy") {
         addNSObject "authentication storefrontAuthAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication storefrontAuthAction")
         addNSObject "authentication tacacsAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication tacacsAction")
         addNSObject "authentication webAuthAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication webAuthAction")
+        addNSObject "authentication emailAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication emailAction")
     }
 }
 
@@ -2260,6 +2262,7 @@ if ($NSObjects."authentication negotiateAction" ) { outputObjectConfig "Negotiat
 if ($NSObjects."authentication storefrontAuthAction" ) { outputObjectConfig "StorefrontAuth Actions" "authentication storefrontAuthAction" }
 if ($NSObjects."authentication tacacsAction" ) { outputObjectConfig "TACACS Actions" "authentication tacacsAction" }
 if ($NSObjects."authentication webAuthAction" ) { outputObjectConfig "Web Auth Actions" "authentication webAuthAction" }
+if ($NSObjects."authentication emailAction" ) { outputObjectConfig "Email (SSPR) Actions" "authentication emailAction" }
 if ($NSObjects."authentication samlPolicy" ) { outputObjectConfig "SAML Authentication Policies" "authentication samlPolicy" }
 if ($NSObjects."authentication policy" ) { outputObjectConfig "Advanced Authentication Policies" "authentication policy" }
 if ($NSObjects."authentication loginSchema" ) { outputObjectConfig "Login Schemas" "authentication loginSchema" }
