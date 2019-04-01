@@ -30,6 +30,7 @@ param (
 
 # Change Log
 # ----------
+# 2019 Apr 1 - new "Sys" option to extract System Settings
 # 2019 Mar 6 - fixed Visualizer substring match, and added emailAction
 # 2018 Dec 27 - fix aaa tm trafficpolicy/action aaa kcdAccount output (BKF)
 # 2018 Dec 2 - added nFactor Visualizer for AAA vServers
@@ -103,6 +104,7 @@ if (!$configFile) { $configFile = Get-InputFile $inputfile }
 
 "Loading config file $configFile ...`n"
 
+if (!$configFile) { exit }
 $config = ""
 $config = Get-Content $configFile -ErrorAction Stop
 
@@ -253,15 +255,15 @@ function addNSObject ($NSObjectType, $NSObjectName) {
 
 function getNSObjects ($matchConfig, $NSObjectType, $paramName, $position) {
     # Read all objects of type from from full config
-    $objectsAll = $config | select-string -Pattern ('^(add|set|bind) ' + $NSObjectType + ' (".*?"|[^-"]\S+)($| )') | % {$_.Matches.Groups[2].value}
+    $objectsAll = $config | select-string -Pattern ('^(add|set|bind) ' + $NSObjectType + ' (".*?"|[^-"]\S+)($| )') | ForEach-Object {$_.Matches.Groups[2].value}
 
     # Strip Comments
-    $matchConfig = $matchConfig | % {$_ -replace '-comment ".*?"' }
+    $matchConfig = $matchConfig | ForEach-Object {$_ -replace '-comment ".*?"' }
     
     # Build Position matching string - match objectCandidate after the # of positions - avoids Action name matching Policy name
     if ($position) {
         $positionString = ""
-        1..($position) | % {
+        1..($position) | ForEach-Object {
             $positionString += '(".*?"|[^"]\S+) '
         }
         $positionString += ".* "
@@ -319,7 +321,7 @@ function getHttpVServer ($matchConfig) {
     # Read all LB/CS objects of protocol HTTP/SSL from from full config. Extract Name, IP, and Port
     if ($matchConfig -match "http://") 
     {
-        $objectsAll = $config | select-string -Pattern '^add (lb|cs) vserver (".*?"|[^-"]\S+) HTTP (\d+\.\d+.\d+\.\d+) (\d+) ' | % { New-Object PSObject -property @{
+        $objectsAll = $config | select-string -Pattern '^add (lb|cs) vserver (".*?"|[^-"]\S+) HTTP (\d+\.\d+.\d+\.\d+) (\d+) ' | ForEach-Object { New-Object PSObject -property @{
             Name = $_.Matches.Groups[2].value
             IP = $_.Matches.Groups[3].value
             Port = $_.Matches.Groups[4].value
@@ -328,7 +330,7 @@ function getHttpVServer ($matchConfig) {
     } 
     elseif ($matchConfig -match "https://")
     {
-        $objectsAll = $config | select-string -Pattern '^add (lb|cs) vserver (".*?"|[^-"]\S+) SSL (\d+\.\d+.\d+\.\d+) (\d+)' | % { New-Object PSObject -property @{
+        $objectsAll = $config | select-string -Pattern '^add (lb|cs) vserver (".*?"|[^-"]\S+) SSL (\d+\.\d+.\d+\.\d+) (\d+)' | ForEach-Object { New-Object PSObject -property @{
             Name = $_.Matches.Groups[2].value
             IP = $_.Matches.Groups[3].value
             Port = $_.Matches.Groups[4].value
@@ -363,41 +365,41 @@ function getHttpVServer ($matchConfig) {
 
 function outputnFactorPolicies ($bindingType, $indent) {
     $matchedConfig = @()
-    $loginSchemaProfile = $config | select-string -Pattern ('^add ' + $bindingType + ' -loginSchema (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value}
+    $loginSchemaProfile = $config | select-string -Pattern ('^add ' + $bindingType + ' -loginSchema (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value}
     if ($loginSchemaProfile) {
         $matchedConfig += $linePrefix + ($spacing * ($indent)) + "Login Schema Profile = " + $loginSchemaProfile
         $loginSchemaProfile = $config -match '^add authentication loginSchema ' + $loginSchemaProfile + " "
-        $loginSchemaXML = $loginSchemaProfile | select-string -Pattern ('-authenticationSchema (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value}
+        $loginSchemaXML = $loginSchemaProfile | select-string -Pattern ('-authenticationSchema (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value}
         if ($loginSchemaXML) {
             $matchedConfig += $linePrefix + ($spacing * ($indent)) + "Login Schema XML = " + $loginSchemaXML
         }
     }
-    $policies = $config | select-string -Pattern ('^bind ' + $bindingType + ' -(policy|policyName|loginSchema) (".*?"|[^-"]\S+)($| )') | % {$_.Matches.Groups[2].value}
+    $policies = $config | select-string -Pattern ('^bind ' + $bindingType + ' -(policy|policyName|loginSchema) (".*?"|[^-"]\S+)($| )') | ForEach-Object {$_.Matches.Groups[2].value}
     foreach ($policy in $policies) {
         $policyBinding = $config -match ('^bind ' + $bindingType + " -(policy|policyName|loginSchema) " + $policy + " ")
-        $priority = $policyBinding | select-string -Pattern ('-priority (\d+)') | % {$_.Matches.Groups[1].value}
-        $goto = $policyBinding | select-string -Pattern ('-gotoPriorityExpression (\S+)') | % {$_.Matches.Groups[1].value}
+        $priority = $policyBinding | select-string -Pattern ('-priority (\d+)') | ForEach-Object {$_.Matches.Groups[1].value}
+        $goto = $policyBinding | select-string -Pattern ('-gotoPriorityExpression (\S+)') | ForEach-Object {$_.Matches.Groups[1].value}
         $loginSchemaPolicy = $config -match '^add authentication loginSchemaPolicy ' + $policy + " "
         if ($loginSchemaPolicy) {
-            $loginSchemaAction = $loginSchemaPolicy | select-string -Pattern ('-action (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value}
-            $rule = $loginSchemaPolicy | select-string -Pattern ('-rule (.*?) -action') | % {$_.Matches.Groups[1].value}
+            $loginSchemaAction = $loginSchemaPolicy | select-string -Pattern ('-action (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value}
+            $rule = $loginSchemaPolicy | select-string -Pattern ('-rule (.*?) -action') | ForEach-Object {$_.Matches.Groups[1].value}
             $matchedConfig += $linePrefix + ($spacing * $indent) + "Login Schema Policy = " + $policy
             $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Priority = " + $priority
             $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Login Policy Rule = " + $rule
             $loginSchemaProfile = $config -match '^add authentication loginSchema ' + $loginSchemaAction + " "
             if ($loginSchemaProfile) {
-                $loginSchemaXML = $loginSchemaProfile | select-string -Pattern ('-authenticationSchema (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value}
+                $loginSchemaXML = $loginSchemaProfile | select-string -Pattern ('-authenticationSchema (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value}
                 $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Login Schema XML = " + $loginSchemaXML
             }
         }
         $authPolicy = $config -match '^add authentication Policy ' + $policy + ' '
         if ($authPolicy) {
-            $authAction = $authPolicy | select-string -Pattern ('-action (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value}
+            $authAction = $authPolicy | select-string -Pattern ('-action (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value}
             $authActionConfig = $config -match '^add authentication \w+?Action ' + $authAction + " "
-            $AAAGroup = $authActionConfig | select-string -Pattern ('-defaultAuthenticationGroup (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value}
-            $authType = $authActionConfig | select-string -Pattern ('^add authentication (\w+?Action)') | % {$_.Matches.Groups[1].value}
-            $rule = $authPolicy | select-string -Pattern ('-rule (.*?) -action') | % {$_.Matches.Groups[1].value}
-            $nextFactor = $policyBinding | select-string -Pattern ('-nextFactor (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value}
+            $AAAGroup = $authActionConfig | select-string -Pattern ('-defaultAuthenticationGroup (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value}
+            $authType = $authActionConfig | select-string -Pattern ('^add authentication (\w+?Action)') | ForEach-Object {$_.Matches.Groups[1].value}
+            $rule = $authPolicy | select-string -Pattern ('-rule (.*?) -action') | ForEach-Object {$_.Matches.Groups[1].value}
+            $nextFactor = $policyBinding | select-string -Pattern ('-nextFactor (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value}
             $matchedConfig += $linePrefix + ($spacing * $indent) + "Adv Authn Policy = " + $policy
             $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Priority = " + $priority
             $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Authn Policy Rule = " + $rule
@@ -424,7 +426,7 @@ function outputObjectConfig ($header, $NSObjectKey, $NSObjectType, $explainText)
     
     # Build header line
     $output = "# " + $header + "`n# "
-    1..$header.length | % {$output += "-"}
+    1..$header.length | ForEach-Object {$output += "-"}
     $output += "`n"
     
     $matchedConfig = @()
@@ -455,7 +457,7 @@ function outputObjectConfig ($header, $NSObjectKey, $NSObjectType, $explainText)
 
     if ($explainText) { 
         $explainText = @($explainText -split "`n")
-        $explainText | % {
+        $explainText | ForEach-Object {
             $matchedConfig += "# *** " + $_
         }
         $matchedConfig += "`n"
@@ -481,7 +483,7 @@ function outputObjectConfig ($header, $NSObjectKey, $NSObjectType, $explainText)
         
         # if binding new cipher group, remove old ciphers first
         # only add unbind line once per SSL object
-        $SSLvserverNameMatch = $line | select-string -Pattern ('^bind ssl (vserver|service|serviceGroup|monitor) (.*) -cipherName') | % {$_.Matches.Groups[2].value}
+        $SSLvserverNameMatch = $line | select-string -Pattern ('^bind ssl (vserver|service|serviceGroup|monitor) (.*) -cipherName') | ForEach-Object {$_.Matches.Groups[2].value}
         if ($SSLvserverNameMatch -and ($SSLVServerName -ne $SSLvserverNameMatch)) {
             $SSLVServerName = $SSLvserverNameMatch
             $output += ($line -replace "bind (.*) -cipherName .*", "unbind `$1 -cipherName DEFAULT`n")
@@ -517,11 +519,11 @@ do {
     if ($vserver -match " ") { 
         $vserver = [char]34 + $vserver + [char]34 
     }
-    $vservers = $config -match "$vserver" | select-string -Pattern ('^add \w+ vserver (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value}
+    $vservers = $config -match "$vserver" | select-string -Pattern ('^add \w+ vserver (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value}
     if (!$vservers) {
         # Try substring matches without quotes
         if ($vserver -match " ") { $vserver = $vserver -replace [char]34 }
-        $vservers = $config -match "$vserver" | select-string -Pattern ('^add \w+ vserver (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value}
+        $vservers = $config -match "$vserver" | select-string -Pattern ('^add \w+ vserver (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value}
     }
     
     # Make sure it's an array, even if only one match
@@ -531,16 +533,20 @@ do {
     # If second loop, then user must have changed the filter, and wants to see results, even if only one (or none).
     if (($vservers.length -eq 1 -and $firstLoop) -or $vservers -contains $vserver) { 
         # Get vServer Type
-        $vserverType = $config -match " $vservers " | select-string -Pattern ('^add (\w+) vserver') | % {$_.Matches.Groups[1].value}
+        $vserverType = $config -match " $vservers " | select-string -Pattern ('^add (\w+) vserver') | ForEach-Object {$_.Matches.Groups[1].value}
         addNSObject ($vserverType + " vserver") $vservers
         $selectionDone = $true
     } else {
         # Prompt for vServer selection
         
+        # Prepend System option
+        $vservers = @("System Settings") + $vservers
+
         # Get vServer Type for each vServer name - later display to user
         $vserverTypes = @("") * ($vservers.length)
-        for ($x = 0; $x -lt $vservers.length; $x++) {
-            $vserverTypes[$x] = $config -match "$vserver" | select-string -Pattern ('^add (\w+) vserver ' + $vservers[$x] + " ") | % {$_.Matches.Groups[1].value}
+        $vserverTypes[0] = "sys"
+        for ($x = 1; $x -lt $vservers.length; $x++) {
+            $vserverTypes[$x] = $config -match "$vserver" | select-string -Pattern ('^add (\w+) vserver ' + $vservers[$x] + " ") | ForEach-Object {$_.Matches.Groups[1].value}
         }
         
         # Change "authentication" to "aaa" so it fits within 4 char column
@@ -548,8 +554,8 @@ do {
     
         # Get VIPs for each vServer so they can be displayed to the user
         $VIPs = @("") * ($vservers.length)
-        for ($x = 0; $x -lt $vservers.length; $x++) {
-            $VIPs[$x] = $config -match "$vserver" | select-string -Pattern ('^add \w+ vserver ' + $vservers[$x] + ' \w+ (\d+\.\d+\.\d+\.\d+)') | % {$_.Matches.Groups[1].value}
+        for ($x = 1; $x -lt $vservers.length; $x++) {
+            $VIPs[$x] = $config -match "$vserver" | select-string -Pattern ('^add \w+ vserver ' + $vservers[$x] + ' \w+ (\d+\.\d+\.\d+\.\d+)') | ForEach-Object {$_.Matches.Groups[1].value}
         }
 
         $selected = @("") * ($vservers.length)
@@ -568,7 +574,7 @@ do {
             $vserverlist = $vservers | Foreach-object{,($_.trim('"') )}
             $vserverlist = (('tell application "SystemUIServer"'+"`n"+'activate'+"`n"+'set vserver to (choose from list  {"'+($vserverlist -join '","')+'"} with prompt "Command+Select Multiple Virtual Servers to extract" with multiple selections allowed)'+"`n"+'end tell' | osascript -s s) -replace ', ',',')
             $vserverObjects = @()
-            [regex]::Matches($vserverlist, '(?:([\w\s]+))') | %{
+            [regex]::Matches($vserverlist, '(?:([\w\s]+))') | ForEach-Object {
                 if ($_.value -match ' '){$vservername = '"'+$_.value+'"'}
                 else {$vservername = $_.value}
                 $x = $vservers.IndexOf($vservername)
@@ -587,8 +593,13 @@ do {
             if ($vserverObject.Type -eq "aaa") {
                 $vserverObject.Type = "authentication"
             }
-            addNSObject ($vserverObject.Type + " vserver") $vserverObject.Name
-            $vservers += $vserverObject.Name
+            if ($vserverObject.Type -eq "sys") {
+                addNSObject ("sys") $vserverObject.Name
+                $vservers += "System Settings"
+            } else {
+                addNSObject ($vserverObject.Type + " vserver") $vserverObject.Name
+                $vservers += $vserverObject.Name
+            }
         }
         $selectionDone = $true
 
@@ -685,13 +696,53 @@ if (!$outputFile) { $outputFile = Get-OutputFile $outputfile }
 $Timer = [system.diagnostics.stopwatch]::StartNew()
 
 # Get DNS Servers
-addNSObject "dns nameServer" (getNSObjects ($config -match "add dns nameServer") "dns nameServer")
-if ($nsObjects."dns nameServer") 
-{
-    foreach ($nameserver in $nsObjects."dns nameServer") {
-        $nameServerConfig = $config -match " $nameserver "
-        addNSObject "lb vserver" (getNSObjects $nameServerConfig "lb vserver")
+if ($nsObjects."sys") {
+    addNSObject "dns nameServer" (getNSObjects ($config -match "add dns nameServer") "dns nameServer")
+    if ($nsObjects."dns nameServer") 
+    {
+        foreach ($nameserver in $nsObjects."dns nameServer") {
+            $nameServerConfig = $config -match "lb vserver $nameserver "
+            addNSObject "lb vserver" (getNSObjects $nameServerConfig "lb vserver")
+        }
     }
+    addNSObject "ns feature" ($config -match "ns feature")
+    addNSObject "ns mode" ($config -match "ns mode")
+    addNSObject "system parameter" ($config -match "system parameter")
+    addNSObject "ns encryptionParams" ($config -match "set ns encryptionParams")
+    
+    # Get Networking Settings
+    addNSObject "ns config" ($config -match "ns config")
+    addNSObject "ns hostName" ($config -match "ns hostName")
+    addNSObject "interface" ($config -match " interface ")
+    addNSObject "channel" ($config -match " channel ")
+    addNSObject "vlan" (getNSObjects ($config -match " vlan ") "vlan")
+    addNSObject "vrid" (getNSObjects ($config -match "vrid") "vrid")
+    addNSObject "ns ip" (getNSObjects ($config -match "ns ip") "ns ip")
+    addNSObject "route" ($config -match " route ")
+    addNSObject "ns pbr" ($config -match " ns pbr")
+    addNSObject "mgmt ssl service" (getNSObjects ($config -match " ssl service ns(krpcs|https|rpcs|rnatsip)-") "ssl service")
+
+    # Get SNMP
+    addNSObject "snmp community" ($config -match " snmp community")
+    addNSObject "snmp manager" ($config -match " snmp manager")
+    addNSObject "snmp trap" ($config -match " snmp trap")
+    addNSObject "snmp alarm" ($config -match " snmp alarm")
+
+    # Get HA settings
+    addNSObject "ha node" ($config -match "HA node")
+    addNSObject "ha rpcNode" (getNSObjects ($config -match "set ns config") "ns rpcNode")
+    addNSObject "ha rpcNode" (getNSObjects ($config -match "HA node") "ns rpcNode")
+    
+    # Get System Global Bindings - authentication, syslog
+    addNSObject "system global" ($config -match "system global")
+    addNSObject "authentication Policy" (getNSObjects ($config -match "system global") "authentication Policy")
+    addNSObject "authentication ldapPolicy" (getNSObjects ($config -match "system global") "authentication ldapPolicy")
+    addNSObject "authentication radiusPolicy" (getNSObjects ($config -match "system global") "authentication radiusPolicy")
+    addNSObject "audit syslogPolicy" (getNSObjects ($config -match "system global") "audit syslogPolicy")
+    addNSObject "audit nslogPolicy" (getNSObjects ($config -match "system global") "audit nslogPolicy")
+    addNSObject "system user" (getNSObjects ($config -match "system user") "system user")
+    addNSObject "system group" (getNSObjects ($config -match "system group") "system group")
+    
 }
 
 
@@ -704,19 +755,19 @@ if ($cswBind){
             {
                 # CSW Default virtual server
                 if ($config -match "bind cs vserver .* -$($cswBindType.$vsrvType) $vsrv"){
-                    addNSObject "cs vserver" ($config -match "bind cs vserver .* -$($cswBindType.$vsrvType) $vsrv" | select-string -Pattern ('^bind cs vserver (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value})
+                    addNSObject "cs vserver" ($config -match "bind cs vserver .* -$($cswBindType.$vsrvType) $vsrv" | select-string -Pattern ('^bind cs vserver (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value})
                 }
                 # CSW Policy Bind -targetlbserver
                 if ($config -match "bind cs vserver .* -policyName .* -targetLBVserver $vsrv"){
-                    addNSObject "cs vserver" ($config -match "bind cs vserver .* -policyName .* -targetLBVserver $vsrv" | select-string -Pattern ('^bind cs vserver (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value})
+                    addNSObject "cs vserver" ($config -match "bind cs vserver .* -policyName .* -targetLBVserver $vsrv" | select-string -Pattern ('^bind cs vserver (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value})
                 }
                 # CSW Action -targetlbserver -targetvserver
                 if ($config -match "add cs action .* -target$($cswBindType.$vsrvType) $vsrv"){
-                    $csaction = ($config -match "add cs action .* -target$($cswBindType.$vsrvType) $vsrv" | select-string -Pattern ('^add cs action (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value})
+                    $csaction = ($config -match "add cs action .* -target$($cswBindType.$vsrvType) $vsrv" | select-string -Pattern ('^add cs action (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value})
                     #CS Policy for CS Action
-                    $cspolicy = ($config -match "add cs policy .* -action $csaction" | select-string -Pattern ('^add cs policy (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value})
+                    $cspolicy = ($config -match "add cs policy .* -action $csaction" | select-string -Pattern ('^add cs policy (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value})
                     #CS vServer for CS Policy
-                    addNSObject "cs vserver" ($config -match "bind cs vserver .* -policyName $cspolicy" | select-string -Pattern ('^bind cs vserver (".*?"|[^-"]\S+)') | % {$_.Matches.Groups[1].value})
+                    addNSObject "cs vserver" ($config -match "bind cs vserver .* -policyName $cspolicy" | select-string -Pattern ('^bind cs vserver (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value})
                 }
             }
         }
@@ -742,7 +793,7 @@ if ($nsObjects."cs vserver") {
             addNSObject "cs vserver" ($backupVServers)
             $nsObjects."cs vserver" += $currentVServers
         }
-        addNSObject "lb vserver" (getNSObjects $vserverconfig "lb vserver" "-targetLBVserver")2
+        addNSObject "lb vserver" (getNSObjects $vserverconfig "lb vserver" "-targetLBVserver")
     }
 }
 
@@ -1230,7 +1281,7 @@ if ($NSObjects."vpn sessionAction") {
 
 
 # Enumerate LB vServer config for additional bound objects
-if ($nsObjects."lb vserver") {
+if ($nsObjects."lb vserver" -or $nsObjects."sys") {
     if ($config -match "enable ns feature.* lb") {
         $NSObjects."lb parameter" = @("enable ns feature lb")
     } else {
@@ -2004,9 +2055,6 @@ if ($NSObjects."spillover policy") {
 }
 
 
-# Get Audit Syslog Policies from Global Audit Syslog Bindings
-addNSObject "audit syslogpolicy" (getNSObjects ($config -match "bind audit syslogglobal ") "audit syslogpolicy")
-
 
 # Get Audit Syslog Actions from Audit Syslog Policies
 if ($NSObjects."audit syslogpolicy") {
@@ -2129,8 +2177,31 @@ if ($outputFile -and ($outputFile -ne "screen")) {
     "# Extracted Config for: " + ($vservers -join ", ") + "`n`n"
 }
 
-# DNS
-if ($NSObjects."dns nameServer" ) { outputObjectConfig "DNS Name Servers" "dns nameServer" }
+
+# System Settings
+if ($NSObjects."ns config" ) { outputObjectConfig "NSIP" "ns config" "raw"}
+if ($NSObjects."ns hostName" ) { outputObjectConfig "Hostname" "ns hostName" "raw"}
+if ($NSObjects."ha node" ) { outputObjectConfig "High Availability Nodes" "HA node" "raw"}
+if ($NSObjects."ha rpcNode" ) { outputObjectConfig "High Availability RPC Nodes" "ha rpcNode" "ns rpcNode"}
+if ($NSObjects."ns feature" ) { outputObjectConfig "Enabled Features" "ns feature" "raw"}
+if ($NSObjects."ns mode" ) { outputObjectConfig "Enabled Modes" "ns mode" "raw"}
+if ($NSObjects."system parameter" ) { outputObjectConfig "CEIP" "system parameter" "raw"}
+if ($NSObjects."ns encryptionParams" ) { outputObjectConfig "System Encryption Parameters" "ns encryptionParams" "raw"}
+if ($NSObjects."system user" ) { outputObjectConfig "System Users" "system user"}
+if ($NSObjects."system group" ) { outputObjectConfig "System Groups" "system group"}
+if ($NSObjects."interface" ) { outputObjectConfig "Interfaces" "interface" "raw"}
+if ($NSObjects."channel" ) { outputObjectConfig "Channels" "channel" "raw"}
+if ($NSObjects."vlan" ) { outputObjectConfig "VLANs" "vlan"}
+if ($NSObjects."ns ip" ) { outputObjectConfig "IP Addresses" "ns ip"}
+if ($NSObjects."vrid" ) { outputObjectConfig "VMACs" "vrid"}
+if ($NSObjects."ns pbr" ) { outputObjectConfig "Policy Based Routes (PBRs)" "ns pbr" "raw"}
+if ($NSObjects."route" ) { outputObjectConfig "Routes" "route" "raw"}
+if ($NSObjects."mgmt ssl service" ) { outputObjectConfig "Internal Management Services SSL Settings" "mgmt ssl service" "ssl service"}
+if ($NSObjects."snmp trap" ) { outputObjectConfig "SNMP Traps" "snmp trap" "raw"}
+if ($NSObjects."snmp community" ) { outputObjectConfig "SNMP Communities" "snmp community" "raw"}
+if ($NSObjects."snmp manager" ) { outputObjectConfig "SNMP Managers" "snmp manager" "raw"}
+if ($NSObjects."snmp alarm" ) { outputObjectConfig "SNMP Alarms" "snmp alarm" "raw"}
+
 
 # Policy Expression Components and Profiles Output
 if ($NSObjects."ns acl" ) { outputObjectConfig "Global ACLs" "ns acl" "raw" }
@@ -2222,11 +2293,9 @@ if ($NSObjects."filter global" ) { outputObjectConfig "Filter Global Bindings" "
 
 if ($NSObjects."audit syslogaction" ) { outputObjectConfig "Audit Syslog Actions" "audit syslogaction" }
 if ($NSObjects."audit syslogpolicy" ) { outputObjectConfig "Audit Syslog Policies" "audit syslogpolicy" }
-if ($NSObjects."audit syslogglobal" ) { outputObjectConfig "Audit Syslog Global Bindings" "audit syslogglobal" "raw" }
 
 if ($NSObjects."audit nslogaction" ) { outputObjectConfig "Audit NSLog Actions" "audit nslogaction" }
 if ($NSObjects."audit nslogpolicy" ) { outputObjectConfig "Audit NSLog Policies" "audit nslogpolicy" }
-if ($NSObjects."audit nslogglobal" ) { outputObjectConfig "Audit NSLog Global Bindings" "audit nslogglobal" "raw" }
 
 
 # SSL Output
@@ -2341,6 +2410,10 @@ if ($NSObjects."cr vserver" ) { outputObjectConfig "Cache Redirection Virtual Se
 if ($NSObjects."cs vserver" ) { outputObjectConfig "Content Switching Virtual Servers" "cs vserver" }
 
 if ($NSObjects."ssl vserver" ) { outputObjectConfig "SSL Virtual Servers" "ssl vserver" }
+
+# Global System Bindings - can't bind until objects are created
+if ($NSObjects."system global" ) { outputObjectConfig "System Global Bindings" "system global" "raw"}
+if ($NSObjects."dns nameServer" ) { outputObjectConfig "DNS Name Servers" "dns nameServer" }
 
 
 if ($outputFile -and ($outputFile -ne "screen")) {
