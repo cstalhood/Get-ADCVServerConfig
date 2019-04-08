@@ -100,11 +100,13 @@ Function Get-OutputFile($initialDirectory)
 
 
 # Run the Get-InputFile function to ask the user for the NetScaler config file
-if (!$configFile) { $configFile = Get-InputFile $inputfile }
+if (!$configFile) { 
+    $configFile = Get-InputFile $inputfile 
+}
+if (!$configFile) { exit }
 
 "Loading config file $configFile ...`n"
 
-if (!$configFile) { exit }
 $config = ""
 $config = Get-Content $configFile -ErrorAction Stop
 
@@ -385,7 +387,7 @@ function outputnFactorPolicies ($bindingType, $indent) {
             $rule = $loginSchemaPolicy | select-string -Pattern ('-rule (.*?) -action') | ForEach-Object {$_.Matches.Groups[1].value}
             $matchedConfig += $linePrefix + ($spacing * $indent) + "Login Schema Policy = " + $policy
             $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Priority = " + $priority
-            $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Login Policy Rule = " + $rule
+            $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Rule = " + $rule
             $loginSchemaProfile = $config -match '^add authentication loginSchema ' + $loginSchemaAction + " "
             if ($loginSchemaProfile) {
                 $loginSchemaXML = $loginSchemaProfile | select-string -Pattern ('-authenticationSchema (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value}
@@ -402,11 +404,11 @@ function outputnFactorPolicies ($bindingType, $indent) {
             $nextFactor = $policyBinding | select-string -Pattern ('-nextFactor (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value}
             $matchedConfig += $linePrefix + ($spacing * $indent) + "Adv Authn Policy = " + $policy
             $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Priority = " + $priority
-            $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Authn Policy Rule = " + $rule
+            $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Rule = " + $rule
             if ($authType) {
-                $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Authn Action = " + $authType + " named " + $authAction
+                $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Action = " + $authType + " named " + $authAction
             } else {
-                $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Authn Action = " + $authAction
+                $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "Action = " + $authAction
             }
             if ($AAAGroup) {
                 $matchedConfig += $linePrefix + ($spacing * ($indent + 1)) + "AAA Group = " + $AAAGroup            
@@ -1986,8 +1988,8 @@ if ($NSObjects."appfw policy") {
 # Get Login Schemas from Login Schema Policies
 if ($NSObjects."authentication loginSchemaPolicy") {
     foreach ($policy in $NSObjects."authentication loginSchemaPolicy") {
-        addNSObject "authentication loginSchema" (getNSObjects ($config -match "authentication loginSchema $policy ") "authentication loginSchema")
-        addNSObject "audit messageaction" (getNSObjects ($config -match "authentication loginSchema $policy") "audit messageaction" "-logAction")
+        addNSObject "authentication loginSchema" (getNSObjects ($config -match "authentication loginSchemaPolicy $policy ") "authentication loginSchema")
+        addNSObject "audit messageaction" (getNSObjects ($config -match "authentication loginSchemaPolicy $policy") "audit messageaction" "-logAction")
 
     }
 }
