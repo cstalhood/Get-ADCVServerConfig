@@ -30,6 +30,8 @@ param (
 
 # Change Log
 # ----------
+# 2019 Apr 15 - fixed server enumeration
+# 2019 Apr 7 - reoredered Policy Expression output
 # 2019 Apr 1 - new "Sys" option to extract System Settings
 # 2019 Mar 6 - fixed Visualizer substring match, and added emailAction
 # 2018 Dec 27 - fix aaa tm trafficpolicy/action aaa kcdAccount output (BKF)
@@ -1003,7 +1005,7 @@ if ($nsObjects."gslb vserver") {
         foreach ($service in $NSObjects."gslb service") 
         { 
             # wrap config matches in spaces to avoid substring matches
-            $serviceConfig = $config -match " $service "
+            $serviceConfig = $config -match " gslb service $service "
             addNSObject "monitor" (getNSObjects $serviceConfig "lb monitor" "-monitorName")
             addNSObject "server" (getNSObjects $serviceConfig "server")
             addNSObject "ssl profile" (getNSObjects $serviceConfig "ssl profile")
@@ -1304,7 +1306,7 @@ if ($nsObjects."lb vserver" -or $nsObjects."sys") {
         if ($NSObjects.service) {
             foreach ($service in $NSObjects.service) { 
                 # wrap config matches in spaces to avoid substring matches
-                $serviceConfig = $config -match " $service "
+                $serviceConfig = $config -match " service $service "
                 addNSObject "monitor" (getNSObjects $serviceConfig "lb monitor" "-monitorName")
                 addNSObject "server" (getNSObjects $serviceConfig "server")
                 addNSObject "ssl profile" (getNSObjects $serviceConfig "ssl profile")
@@ -1319,7 +1321,7 @@ if ($nsObjects."lb vserver" -or $nsObjects."sys") {
         addNSObject "serviceGroup" (getNSObjects $vserverConfig "serviceGroup")
         if ($NSObjects.serviceGroup) {
             foreach ($serviceGroup in $NSObjects.serviceGroup) {
-                $serviceConfig = $config -match " $serviceGroup "
+                $serviceConfig = $config -match " serviceGroup $serviceGroup "
                 addNSObject "monitor" (getNSObjects $serviceConfig "lb monitor" "-monitorName")
                 addNSObject "server" (getNSObjects $serviceConfig "server")
                 addNSObject "ssl profile" (getNSObjects $serviceConfig "ssl profile")
@@ -2214,13 +2216,13 @@ if ($NSObjects."ns limitIdentifier" ) { outputObjectConfig "Rate Limiting Identi
 if ($NSObjects."stream selector" ) { outputObjectConfig "Action Analytics Selectors" "stream selector" }
 if ($NSObjects."stream identifier" ) { outputObjectConfig "Action Analytics Identifiers" "stream identifier" }
 if ($NSObjects."policy param" ) { outputObjectConfig "Policy Global Params" "policy param" "raw" }
-if ($NSObjects."policy expression" ) { outputObjectConfig "Policy Expressions" "policy expression" }
 if ($NSObjects."policy patset" ) { outputObjectConfig "Policy Pattern Sets" "policy patset" }
 if ($NSObjects."policy dataset" ) { outputObjectConfig "Policy Data Sets" "policy dataset" }
 if ($NSObjects."policy map" ) { outputObjectConfig "Policy Maps" "policy map" }
 if ($NSObjects."policy stringmap" ) { outputObjectConfig "Policy String Maps" "policy stringmap" }
 if ($NSObjects."policy urlset" ) { outputObjectConfig "Policy URL Sets" "policy urlset" }
 if ($NSObjects."policy httpCallout" ) { outputObjectConfig "HTTP Callouts" "policy httpCallout" }
+if ($NSObjects."policy expression" ) { outputObjectConfig "Policy Expressions" "policy expression" }
 if ($NSObjects."dns addRec" ) { outputObjectConfig "DNS Address Records" "dns addRec" }
 if ($NSObjects."dns nsRec" ) { outputObjectConfig "DNS Name Server Records" "dns nsRec"}
 if ($NSObjects."dns cnameRec" ) { outputObjectConfig "DNS CNAME Records" "dns cnameRec"}
