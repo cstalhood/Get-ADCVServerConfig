@@ -256,13 +256,27 @@ function addNSObject ($NSObjectType, $NSObjectName) {
 
         # Look for vServer VIPs
         if ($filteredConfig -match "\d+\.\d+\.\d+\.\d+") {
-            if (!$nsObjects."lb vserver") { $nsObjects."lb vserver" = @()}
-            $nsObjects."lb vserver" += getNSObjects $filteredConfig "lb vserver"
-            $nsObjects."lb vserver" = @($nsObjects."lb vserver" | Select-Object -Unique)
-            $nsObjects."cs vserver" += getNSObjects $filteredConfig "cs vserver"
-            $nsObjects."cs vserver" = @($nsObjects."cs vserver" | Select-Object -Unique)
-            $nsObjects."vpn vserver" += getNSObjects $filteredConfig "vpn vserver"
-            $nsObjects."vpn vserver" = @($nsObjects."vpn vserver" | Select-Object -Unique)
+            $objectsToAdd = getNSObjects $filteredConfig "lb vserver"
+            if ($objectsToAdd) {
+                if (!$nsObjects."lb vserver") { $nsObjects."lb vserver" = @()}
+                $nsObjects."lb vserver" += getNSObjects $filteredConfig "lb vserver"
+                $nsObjects."lb vserver" = @($nsObjects."lb vserver" | Select-Object -Unique)
+                GetLBvServerBindings $objectsToAdd
+            }
+            
+            $objectsToAdd = getNSObjects $filteredConfig "cs vserver"
+            if ($objectsToAdd) {
+                if (!$nsObjects."cs vserver") { $nsObjects."cs vserver" = @()}
+                $nsObjects."cs vserver" += getNSObjects $filteredConfig "cs vserver"
+                $nsObjects."cs vserver" = @($nsObjects."cs vserver" | Select-Object -Unique)
+            }
+
+            $objectsToAdd = getNSObjects $filteredConfig "vpn vserver"
+            if ($objectsToAdd) {
+                if (!$nsObjects."vpn vserver") { $nsObjects."vpn vserver" = @()}
+                $nsObjects."vpn vserver" += getNSObjects $filteredConfig "vpn vserver"
+                $nsObjects."vpn vserver" = @($nsObjects."vpn vserver" | Select-Object -Unique)
+            }
         }
     }
 }
@@ -380,6 +394,84 @@ function getNSObjects ($matchConfig, $NSObjectType, $paramName, $position) {
     return $objectMatches
 }
 
+
+function GetLBvServerBindings ($objectsList) {
+
+    foreach ($lbvserver in $objectsList) {
+        $vserverConfig = $config -match " lb vserver $lbvserver "
+        addNSObject "service" (getNSObjects $vserverConfig "service")
+        if ($NSObjects.service) {
+            foreach ($service in $NSObjects.service) { 
+                # wrap config matches in spaces to avoid substring matches
+                $serviceConfig = $config -match " service $service "
+                addNSObject "monitor" (getNSObjects $serviceConfig "lb monitor" "-monitorName")
+                addNSObject "server" (getNSObjects $serviceConfig "server")
+                addNSObject "ssl profile" (getNSObjects $serviceConfig "ssl profile")
+                addNSObject "netProfile" (getNSObjects $serviceConfig "netProfile" "-netProfile")
+                addNSObject "ns trafficDomain" (getNSObjects $serviceConfig "ns trafficDomain" "-td")
+                addNSObject "ns httpProfile" (getNSObjects $serviceConfig "ns httpProfile" "-httpProfileName")
+                addNSObject "ssl cipher" (getNSObjects $serviceConfig "ssl cipher")
+                addNSObject "ssl certKey" (getNSObjects $serviceConfig "ssl certKey" "-certkeyName")
+                addNSObject "ssl certKey" (getNSObjects $serviceConfig "ssl certKey" "-cacert")
+            }
+        }
+        addNSObject "serviceGroup" (getNSObjects $vserverConfig "serviceGroup")
+        if ($NSObjects.serviceGroup) {
+            foreach ($serviceGroup in $NSObjects.serviceGroup) {
+                $serviceConfig = $config -match " serviceGroup $serviceGroup "
+                addNSObject "monitor" (getNSObjects $serviceConfig "lb monitor" "-monitorName")
+                addNSObject "server" (getNSObjects $serviceConfig "server")
+                addNSObject "ssl profile" (getNSObjects $serviceConfig "ssl profile")
+                addNSObject "netProfile" (getNSObjects $serviceConfig "netProfile" "-netProfile")
+                addNSObject "ns trafficDomain" (getNSObjects $serviceConfig "ns trafficDomain" "-td")
+                addNSObject "ns httpProfile" (getNSObjects $serviceConfig "ns httpProfile" "-httpProfileName")
+                addNSObject "ssl cipher" (getNSObjects $serviceConfig "ssl cipher")
+                addNSObject "ssl certKey" (getNSObjects $serviceConfig "ssl certKey" "-certkeyName")
+                addNSObject "ssl certKey" (getNSObjects $serviceConfig "ssl certKey" "-cacert")
+            }
+        }
+        addNSObject "netProfile" (getNSObjects $vserverConfig "netProfile" "-netProfile")
+        addNSObject "ns trafficDomain" (getNSObjects $vserverConfig "ns trafficDomain" "-td")
+        addNSObject "authentication vserver" (getNSObjects $vserverConfig "authentication vserver" "-authnVsName")
+        addNSObject "authentication authnProfile" (getNSObjects $vserverConfig "authentication authnProfile" "-authnProfile")
+        addNSObject "authorization policylabel" (getNSObjects $vserverConfig "authorization policylabel")
+        addNSObject "authorization policy" (getNSObjects $vserverConfig "authorization policy" "-policyName")
+        addNSObject "ssl policy" (getNSObjects $vserverConfig "ssl policy" "-policyName")
+        addNSObject "ssl cipher" (getNSObjects $vserverConfig "ssl cipher" "-cipherName")
+        addNSObject "ssl profile" (getNSObjects $vserverConfig "ssl profile")
+        addNSObject "ssl certKey" (getNSObjects $vserverConfig "ssl certKey" "-certkeyName")
+        addNSObject "ssl certKey" (getNSObjects $vserverConfig "ssl certKey" "-cacert")
+        addNSObject "ssl vserver" (getNSObjects ($config -match "ssl vserver $lbvserver ") "ssl vserver")
+        addNSObject "responder policy" (getNSObjects $vserverConfig "responder policy" "-policyName")
+        addNSObject "responder policylabel" (getNSObjects $vserverConfig "responder policylabel" "policylabel")
+        addNSObject "rewrite policy" (getNSObjects $vserverConfig "rewrite policy" "-policyName")
+        addNSObject "rewrite policylabel" (getNSObjects $vserverConfig "rewrite policylabel" "policylabel")
+        addNSObject "cache policy" (getNSObjects $vserverConfig "cache policy" "-policyName")
+        addNSObject "cache policylabel" (getNSObjects $vserverConfig "cache policylabel")
+        addNSObject "cmp policy" (getNSObjects $vserverConfig "cmp policy" "-policyName")
+        addNSObject "cmp policylabel" (getNSObjects $vserverConfig "cmp policylabel" "policylabel")
+        addNSObject "appqoe policy" (getNSObjects $vserverConfig "appqoe policy" "-policyName")
+        addNSObject "appflow policy" (getNSObjects $vserverConfig "appflow policy" "-policyName")
+        addNSObject "appflow policylabel" (getNSObjects $vserverConfig "appflow policylabel" "policylabel")
+        addNSObject "appfw policy" (getNSObjects $vserverConfig "appfw policy" "-policyName")
+        addNSObject "appfw policylabel" (getNSObjects $vserverConfig "appfw policylabel" "policylabel")
+        addNSObject "filter policy" (getNSObjects $vserverConfig "filter policy" "-policyName")
+        addNSObject "transform policy" (getNSObjects $vserverConfig "transform policy" "-policyName")
+        addNSObject "transform policylabel" (getNSObjects $vserverConfig "transform policylabel")
+        addNSObject "tm trafficPolicy" (getNSObjects $vserverConfig "tm trafficPolicy" "-policyName")
+        addNSObject "feo policy" (getNSObjects $vserverConfig "feo policy" "-policyName")
+        addNSObject "spillover policy" (getNSObjects $vserverConfig "spillover policy" "-policyName")
+        addNSObject "audit syslogPolicy" (getNSObjects $vserverConfig "audit syslogPolicy" "-policyName")
+        addNSObject "audit nslogPolicy" (getNSObjects $vserverConfig "audit nslogPolicy" "-policyName")
+        addNSObject "dns profile" (getNSObjects $vserverConfig "dns profile" "-dnsProfileName" )
+        addNSObject "ns tcpProfile" (getNSObjects $vserverConfig "ns tcpProfile" "-tcpProfileName")
+        addNSObject "ns httpProfile" (getNSObjects $vserverConfig "ns httpProfile" "-httpProfileName")
+        addNSObject "db dbProfile" (getNSObjects $vserverConfig "db dbProfile" "-dbProfileName")
+        addNSObject "lb profile" (getNSObjects $vserverConfig "lb profile" "-lbprofilename")
+        addNSObject "ipset" (getNSObjects $vserverConfig "ipset" "-ipset")
+    }
+
+}
 
 function getHttpVServer ($matchConfig) {
     # Matches local LB/CS vServer VIPs in URLs (e.g. StoreFront URL) - No FQDN support
@@ -1362,79 +1454,7 @@ if ($nsObjects."lb vserver" -or $nsObjects."sys") {
     addNSObject "lb parameter" ($config -match "set ns httpParam") "lb parameter"
     addNSObject "lb parameter" ($config -match "set ns tcpbufParam") "lb parameter"
     addNSObject "lb parameter" ($config -match "set ns timeout") "lb parameter"
-    foreach ($lbvserver in $nsObjects."lb vserver") {
-        $vserverConfig = $config -match " lb vserver $lbvserver "
-        addNSObject "service" (getNSObjects $vserverConfig "service")
-        if ($NSObjects.service) {
-            foreach ($service in $NSObjects.service) { 
-                # wrap config matches in spaces to avoid substring matches
-                $serviceConfig = $config -match " service $service "
-                addNSObject "monitor" (getNSObjects $serviceConfig "lb monitor" "-monitorName")
-                addNSObject "server" (getNSObjects $serviceConfig "server")
-                addNSObject "ssl profile" (getNSObjects $serviceConfig "ssl profile")
-                addNSObject "netProfile" (getNSObjects $serviceConfig "netProfile" "-netProfile")
-                addNSObject "ns trafficDomain" (getNSObjects $serviceConfig "ns trafficDomain" "-td")
-                addNSObject "ns httpProfile" (getNSObjects $serviceConfig "ns httpProfile" "-httpProfileName")
-                addNSObject "ssl cipher" (getNSObjects $serviceConfig "ssl cipher")
-                addNSObject "ssl certKey" (getNSObjects $serviceConfig "ssl certKey" "-certkeyName")
-                addNSObject "ssl certKey" (getNSObjects $serviceConfig "ssl certKey" "-cacert")
-            }
-        }
-        addNSObject "serviceGroup" (getNSObjects $vserverConfig "serviceGroup")
-        if ($NSObjects.serviceGroup) {
-            foreach ($serviceGroup in $NSObjects.serviceGroup) {
-                $serviceConfig = $config -match " serviceGroup $serviceGroup "
-                addNSObject "monitor" (getNSObjects $serviceConfig "lb monitor" "-monitorName")
-                addNSObject "server" (getNSObjects $serviceConfig "server")
-                addNSObject "ssl profile" (getNSObjects $serviceConfig "ssl profile")
-                addNSObject "netProfile" (getNSObjects $serviceConfig "netProfile" "-netProfile")
-                addNSObject "ns trafficDomain" (getNSObjects $serviceConfig "ns trafficDomain" "-td")
-                addNSObject "ns httpProfile" (getNSObjects $serviceConfig "ns httpProfile" "-httpProfileName")
-                addNSObject "ssl cipher" (getNSObjects $serviceConfig "ssl cipher")
-                addNSObject "ssl certKey" (getNSObjects $serviceConfig "ssl certKey" "-certkeyName")
-                addNSObject "ssl certKey" (getNSObjects $serviceConfig "ssl certKey" "-cacert")
-            }
-        }
-        addNSObject "netProfile" (getNSObjects $vserverConfig "netProfile" "-netProfile")
-        addNSObject "ns trafficDomain" (getNSObjects $vserverConfig "ns trafficDomain" "-td")
-        addNSObject "authentication vserver" (getNSObjects $vserverConfig "authentication vserver" "-authnVsName")
-        addNSObject "authentication authnProfile" (getNSObjects $vserverConfig "authentication authnProfile" "-authnProfile")
-        addNSObject "authorization policylabel" (getNSObjects $vserverConfig "authorization policylabel")
-        addNSObject "authorization policy" (getNSObjects $vserverConfig "authorization policy" "-policyName")
-        addNSObject "ssl policy" (getNSObjects $vserverConfig "ssl policy" "-policyName")
-        addNSObject "ssl cipher" (getNSObjects $vserverConfig "ssl cipher" "-cipherName")
-        addNSObject "ssl profile" (getNSObjects $vserverConfig "ssl profile")
-        addNSObject "ssl certKey" (getNSObjects $vserverConfig "ssl certKey" "-certkeyName")
-        addNSObject "ssl certKey" (getNSObjects $vserverConfig "ssl certKey" "-cacert")
-        addNSObject "ssl vserver" (getNSObjects ($config -match "ssl vserver $lbvserver ") "ssl vserver")
-        addNSObject "responder policy" (getNSObjects $vserverConfig "responder policy" "-policyName")
-        addNSObject "responder policylabel" (getNSObjects $vserverConfig "responder policylabel" "policylabel")
-        addNSObject "rewrite policy" (getNSObjects $vserverConfig "rewrite policy" "-policyName")
-        addNSObject "rewrite policylabel" (getNSObjects $vserverConfig "rewrite policylabel" "policylabel")
-        addNSObject "cache policy" (getNSObjects $vserverConfig "cache policy" "-policyName")
-        addNSObject "cache policylabel" (getNSObjects $vserverConfig "cache policylabel")
-        addNSObject "cmp policy" (getNSObjects $vserverConfig "cmp policy" "-policyName")
-        addNSObject "cmp policylabel" (getNSObjects $vserverConfig "cmp policylabel" "policylabel")
-        addNSObject "appqoe policy" (getNSObjects $vserverConfig "appqoe policy" "-policyName")
-        addNSObject "appflow policy" (getNSObjects $vserverConfig "appflow policy" "-policyName")
-        addNSObject "appflow policylabel" (getNSObjects $vserverConfig "appflow policylabel" "policylabel")
-        addNSObject "appfw policy" (getNSObjects $vserverConfig "appfw policy" "-policyName")
-        addNSObject "appfw policylabel" (getNSObjects $vserverConfig "appfw policylabel" "policylabel")
-        addNSObject "filter policy" (getNSObjects $vserverConfig "filter policy" "-policyName")
-        addNSObject "transform policy" (getNSObjects $vserverConfig "transform policy" "-policyName")
-        addNSObject "transform policylabel" (getNSObjects $vserverConfig "transform policylabel")
-        addNSObject "tm trafficPolicy" (getNSObjects $vserverConfig "tm trafficPolicy" "-policyName")
-        addNSObject "feo policy" (getNSObjects $vserverConfig "feo policy" "-policyName")
-        addNSObject "spillover policy" (getNSObjects $vserverConfig "spillover policy" "-policyName")
-        addNSObject "audit syslogPolicy" (getNSObjects $vserverConfig "audit syslogPolicy" "-policyName")
-        addNSObject "audit nslogPolicy" (getNSObjects $vserverConfig "audit nslogPolicy" "-policyName")
-        addNSObject "dns profile" (getNSObjects $vserverConfig "dns profile" "-dnsProfileName" )
-        addNSObject "ns tcpProfile" (getNSObjects $vserverConfig "ns tcpProfile" "-tcpProfileName")
-        addNSObject "ns httpProfile" (getNSObjects $vserverConfig "ns httpProfile" "-httpProfileName")
-        addNSObject "db dbProfile" (getNSObjects $vserverConfig "db dbProfile" "-dbProfileName")
-        addNSObject "lb profile" (getNSObjects $vserverConfig "lb profile" "-lbprofilename")
-        addNSObject "ipset" (getNSObjects $vserverConfig "ipset" "-ipset")
-    }
+    GetLBvServerBindings $NSObjects."lb vserver"
 }
 
 
