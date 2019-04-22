@@ -30,6 +30,7 @@ param (
 
 # Change Log
 # ----------
+# 2019 Apr 22 - added vServer VIP extraction from other commands (e.g. LDAP Action)
 # 2019 Apr 15 - fixed server enumeration
 # 2019 Apr 7 - reoredered Policy Expression output
 # 2019 Apr 1 - new "Sys" option to extract System Settings
@@ -252,6 +253,17 @@ function addNSObject ($NSObjectType, $NSObjectName) {
             $nsObjects."dns nsRec" += $foundObjects
             $nsObjects."dns nsRec" = @($nsObjects."dns nsRec" | Select-Object -Unique) 
         }
+
+        # Look for vServer VIPs
+        if ($filteredConfig -match "\d+\.\d+\.\d+\.\d+") {
+            if (!$nsObjects."lb vserver") { $nsObjects."lb vserver" = @()}
+            $nsObjects."lb vserver" += getNSObjects $filteredConfig "lb vserver"
+            $nsObjects."lb vserver" = @($nsObjects."lb vserver" | Select-Object -Unique)
+            $nsObjects."cs vserver" += getNSObjects $filteredConfig "cs vserver"
+            $nsObjects."cs vserver" = @($nsObjects."cs vserver" | Select-Object -Unique)
+            $nsObjects."vpn vserver" += getNSObjects $filteredConfig "vpn vserver"
+            $nsObjects."vpn vserver" = @($nsObjects."vpn vserver" | Select-Object -Unique)
+        }
     }
 }
 
@@ -260,6 +272,19 @@ function addNSObject ($NSObjectType, $NSObjectName) {
 function getNSObjects ($matchConfig, $NSObjectType, $paramName, $position) {
     # Read all objects of type from from full config
     $objectsAll = $config | select-string -Pattern ('^(add|set|bind) ' + $NSObjectType + ' (".*?"|[^-"]\S+)($| )') | ForEach-Object {$_.Matches.Groups[2].value}
+    $objectsAll = $objectsAll | Where-Object { $nsObjects.$NSObjectType -notcontains $_ }
+    
+    # if looking for matching vServers, also match on VIPs
+    if ($NSObjectType -match " vserver") {
+        $VIPsAll = $config | select-string -Pattern ('^add ' + $NSObjectType + ' (".*?"|[^-"]\S+) \S+ (\d+\.\d+\.\d+\.\d+) (\d+)') | ForEach-Object {
+            @{
+                VIP = $_.Matches.Groups[2].value
+                Name = $_.Matches.Groups[1].value
+                Port = $_.Matches.Groups[3].value
+            }
+        }
+        $VIPsAll = $VIPsAll | Where-Object {$_.VIP -ne "0.0.0.0"}
+    }
 
     # Strip Comments
     $matchConfig = $matchConfig | ForEach-Object {$_ -replace '-comment ".*?"' }
@@ -315,6 +340,43 @@ function getNSObjects ($matchConfig, $NSObjectType, $paramName, $position) {
         }
         
     }
+
+    foreach ($VIP in $VIPsAll) {
+        
+        # For regex, replace dots with escaped dots
+        $VIPDots = $VIP.VIP -replace "\.", "\."
+       
+        # Trying to avoid substring matches
+        if ($paramName) { 
+            # Compare candidate to term immediately following parameter name
+            if (($matchConfig -match ($paramName + " " + $VIPDots + "$" )) -or ($matchConfig -match ($paramName + " " + $VIPDots + " "))) { 
+                if ($matchConfig -match $VIP.Port) { $objectMatches += $VIP.Name }
+            }
+        } elseif ($position) {
+            # Compare candidate to all terms after the specified position # - avoids action name matching policy name
+            if (($matchConfig -match ($positionString + $VIPDots + "$")) -or ($matchConfig -match ($positionString + $VIPDots + " "))) { 
+                if ($matchConfig -match $VIP.Port) { $objectMatches += $VIP.Name }
+            }
+        } elseif (($matchConfig -match (" " + $VIPDots + "$")) -or ($matchConfig -match (" " + $VIPDots + " "))) { 
+            # Look for candidate at end of string, or with spaces surrounding it - avoids substring matches                
+
+            if ($matchConfig -match $VIP.Port) { $objectMatches += $VIP.Name }
+        } elseif (($matchConfig -match ('"' + $VIPDots + '\\"')) -or ($matchConfig -match ('\(' + $VIPDots + '\)"'))) {
+            # Look for AppExpert objects (e.g. policy sets, callouts) in policy expressions that don't have spaces around it
+            
+            if ($matchConfig -match $VIP.Port) { $objectMatches += $VIP.Name }
+        } elseif (($matchConfig -match ('//' + $VIPDots)) -or ($matchConfig -match ($VIPDots + ':'))) {
+            # Look in URLs for DNS records
+            
+            if ($matchConfig -match $VIP.Port) { $objectMatches += $VIP.Name }
+        } elseif (($matchConfig -match ('\.' + $VIPDots + '(\.|"|\(| )'))) {
+            # Look in Policy Expressions for Policy Extensions - .extension. or .extension" or .extension( or .extension 
+            
+            if ($matchConfig -match $VIP.Port) { $objectMatches += $VIP.Name }
+        }
+        
+    }
+
     return $objectMatches
 }
 
