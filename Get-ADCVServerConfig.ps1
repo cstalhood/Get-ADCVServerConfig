@@ -255,7 +255,7 @@ function addNSObject ($NSObjectType, $NSObjectName) {
         }
 
         # Look for vServer VIPs
-        if ($filteredConfig -match "\d+\.\d+\.\d+\.\d+") {
+        if ($filteredConfig -match "\d+\.\d+\.\d+\.\d+" -and $NSObjectType -notmatch " vserver") {
             $objectsToAdd = getNSObjects $filteredConfig "lb vserver"
             if ($objectsToAdd) {
                 if (!$nsObjects."lb vserver") { $nsObjects."lb vserver" = @()}
@@ -2277,8 +2277,8 @@ if ($NSObjects."system user" ) { outputObjectConfig "System Users" "system user"
 if ($NSObjects."system group" ) { outputObjectConfig "System Groups" "system group"}
 if ($NSObjects."interface" ) { outputObjectConfig "Interfaces" "interface" "raw"}
 if ($NSObjects."channel" ) { outputObjectConfig "Channels" "channel" "raw"}
-if ($NSObjects."vlan" ) { outputObjectConfig "VLANs" "vlan"}
 if ($NSObjects."ns ip" ) { outputObjectConfig "IP Addresses" "ns ip"}
+if ($NSObjects."vlan" ) { outputObjectConfig "VLANs" "vlan"}
 if ($NSObjects."vrid" ) { outputObjectConfig "VMACs" "vrid"}
 if ($NSObjects."ns pbr" ) { outputObjectConfig "Policy Based Routes (PBRs)" "ns pbr" "raw"}
 if ($NSObjects."route" ) { outputObjectConfig "Routes" "route" "raw"}
@@ -2516,7 +2516,7 @@ if ($textEditor -and ($outputFile -and ($outputFile -ne "screen"))) {
 
         write-host "`nOpening Output file `"$outputFile`" using `"$textEditor`" ..."
 
-        start-process -FilePath $textEditor -ArgumentList $outputFile
+        start-process -FilePath $textEditor -ArgumentList "`"$outputFile`""
 
     } else { 
         write-host "`nText Editor not found: `"$textEditor`"" 
