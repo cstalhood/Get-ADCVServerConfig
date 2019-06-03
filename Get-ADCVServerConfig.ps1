@@ -30,6 +30,7 @@ param (
 
 # Change Log
 # ----------
+# 2019 Jun 3 - added RNAT; added OTP Push Service; added partitions; added Azure Keys
 # 2019 Apr 22 - added vServer VIP extraction from other commands (e.g. LDAP Action)
 # 2019 Apr 15 - fixed server enumeration
 # 2019 Apr 7 - reoredered Policy Expression output
@@ -284,6 +285,10 @@ function addNSObject ($NSObjectType, $NSObjectName) {
 
 
 function getNSObjects ($matchConfig, $NSObjectType, $paramName, $position) {
+    if ($paramName -and !($matchConfig -match $paramName)) {
+        return
+    }
+    
     # Read all objects of type from from full config
     $objectsAll = $config | select-string -Pattern ('^(add|set|bind) ' + $NSObjectType + ' (".*?"|[^-"]\S+)($| )') | ForEach-Object {$_.Matches.Groups[2].value}
     $objectsAll = $objectsAll | Where-Object { $nsObjects.$NSObjectType -notcontains $_ }
@@ -469,6 +474,7 @@ function GetLBvServerBindings ($objectsList) {
         addNSObject "db dbProfile" (getNSObjects $vserverConfig "db dbProfile" "-dbProfileName")
         addNSObject "lb profile" (getNSObjects $vserverConfig "lb profile" "-lbprofilename")
         addNSObject "ipset" (getNSObjects $vserverConfig "ipset" "-ipset")
+        addNSObject "authentication adfsProxyProfile" (getNSObjects $vserverConfig "authentication adfsProxyProfile" "-adfsProxyProfile")
     }
 
 }
@@ -855,6 +861,7 @@ $Timer = [system.diagnostics.stopwatch]::StartNew()
 
 # Get DNS Servers
 if ($nsObjects."sys") {
+    addNSObject "ns partition" (getNSObjects ($config -match "add ns partition") "ns partition")
     addNSObject "dns nameServer" (getNSObjects ($config -match "add dns nameServer") "dns nameServer")
     if ($nsObjects."dns nameServer") 
     {
@@ -896,8 +903,9 @@ if ($nsObjects."sys") {
     addNSObject "authentication Policy" (getNSObjects ($config -match "system global") "authentication Policy")
     addNSObject "authentication ldapPolicy" (getNSObjects ($config -match "system global") "authentication ldapPolicy")
     addNSObject "authentication radiusPolicy" (getNSObjects ($config -match "system global") "authentication radiusPolicy")
-    addNSObject "audit syslogPolicy" (getNSObjects ($config -match "system global") "audit syslogPolicy")
-    addNSObject "audit nslogPolicy" (getNSObjects ($config -match "system global") "audit nslogPolicy")
+    addNSObject "audit syslogPolicy" (getNSObjects ($config -match "bind system global") "audit syslogPolicy")
+    addNSObject "audit syslogPolicy" (getNSObjects ($config -match "bind audit syslogGlobal") "audit syslogPolicy")
+    addNSObject "audit nslogPolicy" (getNSObjects ($config -match "bind system global") "audit nslogPolicy")
     addNSObject "system user" (getNSObjects ($config -match "system user") "system user")
     addNSObject "system group" (getNSObjects ($config -match "system group") "system group")
     
@@ -1451,6 +1459,7 @@ if ($nsObjects."lb vserver" -or $nsObjects."sys") {
     addNSObject "lb parameter" ($config -match "set dns parameter") "lb parameter"
     addNSObject "lb parameter" ($config -match "set dns profile default-dns-profile") "lb parameter"
     addNSObject "lb parameter" ($config -match "set ns tcpParam") "lb parameter"
+    addNSObject "lb parameter" ($config -match "set ns tcpProfile nstcp_default") "lb parameter"
     addNSObject "lb parameter" ($config -match "set ns httpParam") "lb parameter"
     addNSObject "lb parameter" ($config -match "set ns tcpbufParam") "lb parameter"
     addNSObject "lb parameter" ($config -match "set ns timeout") "lb parameter"
@@ -1532,6 +1541,7 @@ if ($NSObjects."ssl vserver") {
         addNSObject "ssl profile" (getNSObjects ($config -match " ssl vserver $vserver ") "ssl profile" "-sslProfile")
     }
 }
+
 
 
 # Get Authentication Policies and Login Schemas from Authentication Policy Labels
@@ -1647,7 +1657,7 @@ if ($NSObjects."authentication samlPolicy") {
 }
 
 
-# Get SAML Certificates from SAML Actions and Profiles
+# Get SSL Certificates from SAML Actions, SAML Profiles, and ADFS Proxy Profiles
 foreach ($action in $NSObjects."authentication samlAction") {
     addNSObject "ssl certKey" (getNSObjects ($config -match "authentication samlAction $action ") "ssl certKey" "-samlIdPCertName")
     addNSObject "ssl certKey" (getNSObjects ($config -match "authentication samlAction $action ") "ssl certKey" "-samlSigningCertName")
@@ -1656,6 +1666,17 @@ foreach ($action in $NSObjects."authentication samlAction") {
 foreach ($action in $NSObjects."authentication samlIdPProfile") {
     addNSObject "ssl certKey" (getNSObjects ($config -match "authentication samlIdPProfile $action ") "ssl certKey" "-samlIdPCertName")
     addNSObject "ssl certKey" (getNSObjects ($config -match "authentication samlIdPProfile $action ") "ssl certKey" "-samlSPCertName")
+}
+
+foreach ($action in $NSObjects."authentication adfsProxyProfile") {
+    addNSObject "ssl certKey" (getNSObjects ($config -match "authentication adfsProxyProfile $action ") "ssl certKey" "-certKeyName")
+}
+
+
+
+# Get Push Service from LDAP Actions
+foreach ($action in $NSObjects."authentication ldapAction") {
+    addNSObject "authentication pushService" (getNSObjects ($config -match "authentication ldapAction $action ") "authentication pushService" "-pushService")
 }
 
 
@@ -1690,11 +1711,14 @@ foreach ($action in $NSObjects."authentication webAuthAction") {
 }
 
 
-# Get linked CA certs
+# Get objects linked to certKeys
 if ($NSObjects."ssl certKey") {
     foreach ($certKey in $NSObjects."ssl certKey") {
         # Get FIPS Keys from SSL Certs
         addNSObject "ssl fipsKey" (getNSObjects ($config -match "add ssl certKey $certKey ") "ssl fipsKey" "-fipsKey")
+        
+        # Get HSM Keys from SSL Certs
+        addNSObject "ssl hsmKey" (getNSObjects ($config -match "add ssl certKey $certKey ") "ssl hsmKey" "-hsmKey")
         
         # Put Server Cerficates in different bucket than CA Certificates
         addNSObject "ssl cert" ($config -match "add ssl certKey $certKey") "ssl certKey"
@@ -1726,6 +1750,25 @@ if ($NSObjects."ssl certKey") {
             addNSObject "ssl link" ($config -match "link ssl certKey $certKey") "ssl certKey"
         }
         
+    }
+}
+
+
+# Get Azure Key Vaults from HSM Keys
+if ($NSObjects."ssl hmsKey") {
+    foreach ($hmsKey in $NSObjects."ssl hmsKey") {
+        addNSObject "azure keyvault" (getNSObjects ($config -match "add ssl hsmKey $hsmKey ") "azure keyvault" "-keystore")
+    }
+
+    # Get callout root certificates
+    addNSObject "ssl cert" ($config -match "bind ssl cacertGroup ns_callout_certs ") "ssl certKey"
+}
+
+
+# Get Azure Applications from Azure Key Vaults
+if ($NSObjects."azure keyvault") {
+    foreach ($vault in $NSObjects."azure keyVault") {
+        addNSObject "azure application" (getNSObjects ($config -match "add azure keyVault $vault ") "azure application" "-azureApplication")
     }
 }
 
@@ -1898,6 +1941,14 @@ if ($NSObjects."cmp policy") {
     addNSObject "cmp parameter" ($config -match "set cmp parameter ") "cmp parameter"
     addNSObject "cmp global" ($config -match "bind cmp global ") "cmp global"
 }
+
+
+# Get global bound Traffic Management Policies
+addNSObject "tm trafficPolicy" (getNSObjects ($config -match "bind tm global") "tm trafficPolicy")
+addNSObject "tm sessionPolicy" (getNSObjects ($config -match "bind tm global") "tm sessionPolicy")
+addNSObject "audit syslogPolicy" (getNSObjects ($config -match "bind tm global") "audit syslogPolicy")
+addNSObject "audit nslogPolicy" (getNSObjects ($config -match "bind tm global") "audit nslogPolicy")
+addNSObject "tm global" ($config -match "bind tm global ") "tm global"
 
 
 # Get AAA Traffic Actions from AAA Traffic Policies
@@ -2147,7 +2198,9 @@ if ($NSObjects."audit syslogpolicy") {
     foreach ($policy in $NSObjects."audit syslogpolicy") {
         addNSObject "audit syslogaction" (getNSObjects ($config -match " audit syslogpolicy $policy ") "audit syslogaction")
     }
+    addNSObject "audit syslogactionglobal" ($config -match "audit syslogParams ") "audit syslogactionglobal"
     addNSObject "audit syslogactionglobal" ($config -match "bind audit syslogactionglobal ") "audit syslogactionglobal"
+    addNSObject "audit syslogactionglobal" ($config -match "bind audit syslogGlobal ") "audit syslogactionglobal"
 }
 
 
@@ -2216,9 +2269,10 @@ if ($NSObjects."ssl profile") {
 addNSObject "policy param" ($config -match "set policy param") "policy param"
 
 
-# Get ACLs
+# Get ACLs and RNAT
 addNSObject "ns acl" ($config -match "ns acl") "ns acl"
 addNSObject "ns acl" ($config -match "ns simpleacl") "ns acl"
+addNSObject "rnat" (getNSObjects ($config -match "rnat ") "rnat")
 
 
 # Get assignments from variables
@@ -2280,6 +2334,7 @@ if ($NSObjects."channel" ) { outputObjectConfig "Channels" "channel" "raw"}
 if ($NSObjects."ns ip" ) { outputObjectConfig "IP Addresses" "ns ip"}
 if ($NSObjects."vlan" ) { outputObjectConfig "VLANs" "vlan"}
 if ($NSObjects."vrid" ) { outputObjectConfig "VMACs" "vrid"}
+if ($NSObjects."ns partition" ) { outputObjectConfig "Partitions" "ns partition" -explainText "Partition configs are in /nsconfig/partitions" }
 if ($NSObjects."ns pbr" ) { outputObjectConfig "Policy Based Routes (PBRs)" "ns pbr" "raw"}
 if ($NSObjects."route" ) { outputObjectConfig "Routes" "route" "raw"}
 if ($NSObjects."mgmt ssl service" ) { outputObjectConfig "Internal Management Services SSL Settings" "mgmt ssl service" "ssl service"}
@@ -2291,6 +2346,7 @@ if ($NSObjects."snmp alarm" ) { outputObjectConfig "SNMP Alarms" "snmp alarm" "r
 
 # Policy Expression Components and Profiles Output
 if ($NSObjects."ns acl" ) { outputObjectConfig "Global ACLs" "ns acl" "raw" }
+if ($NSObjects."rnat" ) { outputObjectConfig "Global RNAT" "rnat" }
 if ($NSObjects."ns variable" ) { outputObjectConfig "Variables" "ns variable" "raw" }
 if ($NSObjects."ns assignment" ) { outputObjectConfig "Variable Assignments" "ns assignment" "raw" }
 if ($NSObjects."ns limitSelector" ) { outputObjectConfig "Rate Limiting Selectors" "ns limitSelector" }
@@ -2383,6 +2439,8 @@ if ($NSObjects."audit syslogpolicy" ) { outputObjectConfig "Audit Syslog Policie
 if ($NSObjects."audit nslogaction" ) { outputObjectConfig "Audit NSLog Actions" "audit nslogaction" }
 if ($NSObjects."audit nslogpolicy" ) { outputObjectConfig "Audit NSLog Policies" "audit nslogpolicy" }
 
+if ($NSObjects."audit syslogactionglobal" ) { outputObjectConfig "Global Audit Syslog Bindings" "audit syslogactionglobal" "raw" }
+
 
 # SSL Output
 if ($NSObjects."ssl parameter" ) { outputObjectConfig "SSL Global Parameters" "ssl parameter" "raw" }
@@ -2403,6 +2461,7 @@ if ($NSObjects."vpn portaltheme" ) { outputObjectConfig "Portal Themes" "vpn por
 if ($NSObjects."authentication param" ) { outputObjectConfig "AAA Global Settings" "authentication param" "raw" }
 if ($NSObjects."authorization policy" ) { outputObjectConfig "Authorization Policies" "authorization policy" }
 if ($NSObjects."authorization policylabel" ) { outputObjectConfig "Authorization Policies" "authorization policylabel" }
+if ($NSObjects."authentication pushService" ) { outputObjectConfig "OTP Push Service" "authentication pushService" }
 if ($NSObjects."aaa kcdAccount" ) { outputObjectConfig "KCD Accounts" "aaa kcdAccount" }
 if ($NSObjects."authentication ldapAction" ) { outputObjectConfig "LDAP Actions" "authentication ldapAction" }
 if ($NSObjects."authentication ldapPolicy" ) { outputObjectConfig "LDAP Policies" "authentication ldapPolicy" }
@@ -2410,6 +2469,7 @@ if ($NSObjects."authentication radiusAction" ) { outputObjectConfig "RADIUS Acti
 if ($NSObjects."authentication radiusPolicy" ) { outputObjectConfig "RADIUS Policies" "authentication radiusPolicy" }
 if ($NSObjects."authentication OAuthAction" ) { outputObjectConfig "OAuth Actions" "authentication OAuthAction" }
 if ($NSObjects."authentication samlAction" ) { outputObjectConfig "SAML Actions" "authentication samlAction" }
+if ($NSObjects."authentication samlIdPProfile" ) { outputObjectConfig "SAML IdP Profiles" "authentication samlIdPProfile" }
 if ($NSObjects."authentication certAction" ) { outputObjectConfig "Cert Actions" "authentication certAction" }
 if ($NSObjects."authentication dfaAction" ) { outputObjectConfig "Delegaged Forms Authentication Actions" "authentication dfaAction" }
 if ($NSObjects."authentication epaAction" ) { outputObjectConfig "Endpoint Analysis Actions" "authentication epaAction" }
@@ -2418,6 +2478,7 @@ if ($NSObjects."authentication storefrontAuthAction" ) { outputObjectConfig "Sto
 if ($NSObjects."authentication tacacsAction" ) { outputObjectConfig "TACACS Actions" "authentication tacacsAction" }
 if ($NSObjects."authentication webAuthAction" ) { outputObjectConfig "Web Auth Actions" "authentication webAuthAction" }
 if ($NSObjects."authentication emailAction" ) { outputObjectConfig "Email (SSPR) Actions" "authentication emailAction" }
+if ($NSObjects."authentication adfsProxyProfile" ) { outputObjectConfig "ADFS Proxy Profile" "authentication adfsProxyProfile" }
 if ($NSObjects."authentication samlPolicy" ) { outputObjectConfig "SAML Authentication Policies" "authentication samlPolicy" }
 if ($NSObjects."authentication policy" ) { outputObjectConfig "Advanced Authentication Policies" "authentication policy" }
 if ($NSObjects."authentication loginSchema" ) { outputObjectConfig "Login Schemas" "authentication loginSchema" }
@@ -2430,6 +2491,7 @@ if ($NSObjects."authentication authnProfile" ) { outputObjectConfig "Authenticat
 if ($NSObjects."tm formSSOAction" ) { outputObjectConfig "AAA Form SSO Profiles" "tm formSSOAction" }
 if ($NSObjects."tm trafficAction" ) { outputObjectConfig "AAA Traffic Profiles" "tm trafficAction" }
 if ($NSObjects."tm trafficPolicy" ) { outputObjectConfig "AAA Traffic Policies" "tm trafficPolicy" }
+if ($NSObjects."tm global" ) { outputObjectConfig "AAA Global Bindings" "tm global" "raw" }
 
 # Load Balancing output
 if ($NSObjects."lb parameter" ) { outputObjectConfig "Load Balancing Global Parameters" "lb parameter" "raw" }
