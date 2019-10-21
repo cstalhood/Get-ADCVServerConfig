@@ -1239,12 +1239,13 @@ if ($nsObjects."vpn vserver") {
     if ($config -match "enable ns feature.* SSLVPN") {
         $NSObjects."vpn parameter" = @("enable ns feature SSLVPN")
     } else {
-        $NSObjects."vpn parameter" = @("# *** NetScaler Gateway feature is not enabled")
+        $NSObjects."vpn parameter" = @("# *** Citrix Gateway feature is not enabled")
     }
     addNSObject "vpn parameter" ($config -match "vpn parameter") "vpn parameter"
     addNSObject "vpn parameter" ($config -match "ica parameter") "vpn parameter"
     addNSObject "vpn parameter" ($config -match "aaa parameter") "vpn parameter"
     addNSObject "vpn parameter" ($config -match "dns suffix") "vpn parameter"
+    addNSObject "clientless domains" ($config -match "ns_cvpn_default_inet_domains") "clientless domains"
     foreach ($vpnvserver in $nsObjects."vpn vserver") {
         $vserverConfig = $config -match " $vpnvserver "
         addNSObject "cs policylabel" (getNSObjects $vserverConfig "cs policylabel")
@@ -2457,13 +2458,14 @@ if ($NSObjects."ssl policy" ) { outputObjectConfig "SSL Policies" "ssl policy" }
 
 # AAA Output
 if ($NSObjects."vpn portaltheme" ) { outputObjectConfig "Portal Themes" "vpn portaltheme" `
-    -explainText "Portal Theme customizations are not in the NetScaler config file and instead are stored in /var/netscaler/logon/themes/{ThemeName} "}
+    -explainText "Portal Theme customizations are not in the NetScaler config file and instead are stored in /var/netscaler/logon/themes/{ThemeName}" }
 if ($NSObjects."authentication param" ) { outputObjectConfig "AAA Global Settings" "authentication param" "raw" }
 if ($NSObjects."authorization policy" ) { outputObjectConfig "Authorization Policies" "authorization policy" }
 if ($NSObjects."authorization policylabel" ) { outputObjectConfig "Authorization Policies" "authorization policylabel" }
 if ($NSObjects."authentication pushService" ) { outputObjectConfig "OTP Push Service" "authentication pushService" }
 if ($NSObjects."aaa kcdAccount" ) { outputObjectConfig "KCD Accounts" "aaa kcdAccount" }
-if ($NSObjects."authentication ldapAction" ) { outputObjectConfig "LDAP Actions" "authentication ldapAction" }
+if ($NSObjects."authentication ldapAction" ) { outputObjectConfig "LDAP Actions" "authentication ldapAction" `
+	-explainText "LDAP certificate verification Root certificates are in /nsconfig/truststore" }
 if ($NSObjects."authentication ldapPolicy" ) { outputObjectConfig "LDAP Policies" "authentication ldapPolicy" }
 if ($NSObjects."authentication radiusAction" ) { outputObjectConfig "RADIUS Actions" "authentication radiusAction" }
 if ($NSObjects."authentication radiusPolicy" ) { outputObjectConfig "RADIUS Policies" "authentication radiusPolicy" }
@@ -2512,30 +2514,31 @@ if ($NSObjects."cs policy" ) { outputObjectConfig "Content Switching Policies" "
 if ($NSObjects."cs policylabels" ) { outputObjectConfig "Content Switching Policy Labels" "cs policylabels" }
 
 
-# NetScaler Gateway Output
-if ($NSObjects."vpn intranetApplication" ) { outputObjectConfig "NetScaler Gateway Intranet Applications" "vpn intranetApplication" }
+# Citrix Gateway Output
+if ($NSObjects."vpn intranetApplication" ) { outputObjectConfig "Citrix Gateway Intranet Applications" "vpn intranetApplication" }
 if ($NSObjects."aaa preauthenticationaction" ) { outputObjectConfig "Preauthentication Profiles" "aaa preauthenticationaction" }
 if ($NSObjects."aaa preauthenticationpolicy" ) { outputObjectConfig "Preauthentication Policies" "aaa preauthenticationpolicy" }
-if ($NSObjects."vpn eula" ) { outputObjectConfig "NetScaler Gateway EULA" "vpn eula" }
-if ($NSObjects."vpn clientlessAccessProfile" ) { outputObjectConfig "NetScaler Gateway Clientless Access Profiles" "vpn clientlessAccessProfile" }
-if ($NSObjects."vpn clientlessAccessPolicy" ) { outputObjectConfig "NetScaler Gateway Clientless Access Policies" "vpn clientlessAccessPolicy" }
-if ($NSObjects."rdp clientprofile" ) { outputObjectConfig "NetScaler Gateway RDP Profiles" "rdp clientprofile" }
-if ($NSObjects."vpn pcoipProfile" ) { outputObjectConfig "NetScaler Gateway PCoIP Profiles" "vpn pcoipProfile" }
-if ($NSObjects."vpn pcoipVserverProfile" ) { outputObjectConfig "NetScaler Gateway VServer PCoIP Profiles" "vpn pcoipVserverProfile" }
-if ($NSObjects."vpn formSSOAction" ) { outputObjectConfig "NetScaler Gateway Form SSO Profiles" "vpn formSSOAction" }
-if ($NSObjects."vpn trafficAction" ) { outputObjectConfig "NetScaler Gateway Traffic Profiles" "vpn trafficAction" }
-if ($NSObjects."vpn trafficPolicy" ) { outputObjectConfig "NetScaler Gateway Traffic Policies" "vpn trafficPolicy" }
-if ($NSObjects."vpn alwaysONProfile" ) { outputObjectConfig "NetScaler Gateway AlwaysON Profiles" "vpn alwaysONProfile" }
-if ($NSObjects."vpn sessionAction" ) { outputObjectConfig "NetScaler Gateway Session Profiles" "vpn sessionAction" }
-if ($NSObjects."vpn sessionPolicy" ) { outputObjectConfig "NetScaler Gateway Session Policies" "vpn sessionPolicy" }
-if ($NSObjects."ica accessprofile" ) { outputObjectConfig "NetScaler Gateway SmartControl Access Profiles" "ica accessprofile" }
-if ($NSObjects."ica action" ) { outputObjectConfig "NetScaler Gateway SmartControl Actions" "ica action" }
-if ($NSObjects."ica policy" ) { outputObjectConfig "NetScaler Gateway SmartControl Policies" "ica policy" }
-if ($NSObjects."vpn url" ) { outputObjectConfig "NetScaler Gateway Bookmarks" "vpn url" }
-if ($NSObjects."vpn parameter" ) { outputObjectConfig "NetScaler Gateway Global Settings" "vpn parameter" "raw" }
-if ($NSObjects."vpn nextHopServer" ) { outputObjectConfig "NetScaler Gateway Next Hop Servers" "vpn nextHopServer" }
-if ($NSObjects."vpn vserver" ) { outputObjectConfig "NetScaler Gateway Virtual Servers" "vpn vserver" }
-if ($NSObjects."vpn global" ) { outputObjectConfig "NetScaler Gateway Global Bindings" "vpn global" "raw" }
+if ($NSObjects."vpn eula" ) { outputObjectConfig "Citrix Gateway EULA" "vpn eula" }
+if ($NSObjects."vpn clientlessAccessProfile" ) { outputObjectConfig "Citrix Gateway Clientless Access Profiles" "vpn clientlessAccessProfile" }
+if ($NSObjects."vpn clientlessAccessPolicy" ) { outputObjectConfig "Citrix Gateway Clientless Access Policies" "vpn clientlessAccessPolicy" }
+if ($NSObjects."rdp clientprofile" ) { outputObjectConfig "Citrix Gateway RDP Profiles" "rdp clientprofile" }
+if ($NSObjects."vpn pcoipProfile" ) { outputObjectConfig "Citrix Gateway PCoIP Profiles" "vpn pcoipProfile" }
+if ($NSObjects."vpn pcoipVserverProfile" ) { outputObjectConfig "Citrix Gateway VServer PCoIP Profiles" "vpn pcoipVserverProfile" }
+if ($NSObjects."vpn formSSOAction" ) { outputObjectConfig "Citrix Gateway Form SSO Profiles" "vpn formSSOAction" }
+if ($NSObjects."vpn trafficAction" ) { outputObjectConfig "Citrix Gateway Traffic Profiles" "vpn trafficAction" }
+if ($NSObjects."vpn trafficPolicy" ) { outputObjectConfig "Citrix Gateway Traffic Policies" "vpn trafficPolicy" }
+if ($NSObjects."vpn alwaysONProfile" ) { outputObjectConfig "Citrix Gateway AlwaysON Profiles" "vpn alwaysONProfile" }
+if ($NSObjects."vpn sessionAction" ) { outputObjectConfig "Citrix Gateway Session Profiles" "vpn sessionAction" }
+if ($NSObjects."vpn sessionPolicy" ) { outputObjectConfig "Citrix Gateway Session Policies" "vpn sessionPolicy" }
+if ($NSObjects."ica accessprofile" ) { outputObjectConfig "Citrix Gateway SmartControl Access Profiles" "ica accessprofile" }
+if ($NSObjects."ica action" ) { outputObjectConfig "Citrix Gateway SmartControl Actions" "ica action" }
+if ($NSObjects."ica policy" ) { outputObjectConfig "Citrix Gateway SmartControl Policies" "ica policy" }
+if ($NSObjects."vpn url" ) { outputObjectConfig "Citrix Gateway Bookmarks" "vpn url" }
+if ($NSObjects."vpn parameter" ) { outputObjectConfig "Citrix Gateway Global Settings" "vpn parameter" "raw" }
+if ($NSObjects."clientless domains" ) { outputObjectConfig "Citrix Gateway Clientless Domains" "clientless domains" "raw" }
+if ($NSObjects."vpn nextHopServer" ) { outputObjectConfig "Citrix Gateway Next Hop Servers" "vpn nextHopServer" }
+if ($NSObjects."vpn vserver" ) { outputObjectConfig "Citrix Gateway Virtual Servers" "vpn vserver" }
+if ($NSObjects."vpn global" ) { outputObjectConfig "Citrix Gateway Global Bindings" "vpn global" "raw" }
 if ($NSObjects."aaa group" ) { outputObjectConfig "AAA Groups" "aaa group" }
 
 
