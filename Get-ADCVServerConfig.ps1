@@ -2511,7 +2511,7 @@ if ($NSObjects."lb group" ) { outputObjectConfig "Persistency Group" "lb group" 
 if ($NSObjects."cs parameter" ) { outputObjectConfig "Content Switching Parameters" "cs parameter" "raw" }
 if ($NSObjects."cs action" ) { outputObjectConfig "Content Switching Actions" "cs action" }
 if ($NSObjects."cs policy" ) { outputObjectConfig "Content Switching Policies" "cs policy" }
-if ($NSObjects."cs policylabels" ) { outputObjectConfig "Content Switching Policy Labels" "cs policylabels" }
+if ($NSObjects."cs policylabel" ) { outputObjectConfig "Content Switching Policy Labels" "cs policylabel" }
 
 
 # Citrix Gateway Output
