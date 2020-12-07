@@ -25,15 +25,21 @@ param (
     [string]$textEditor = "c:\Program Files (x86)\Notepad++\notepad++.exe",
 
     # Optional get CSW vserver Binds for selected LB and/or VPN virtual server
-    [switch]$cswBind
+    [switch]$cswBind,
+
+    # Max # of nFactor Next Factors to extract
+    [int]$nFactorNestingLevel = 5
 )
 
 # Change Log
 # ----------
+# 2020 Dec 7 - added Captcha action and NoAuth action
+# 2020 Dec 7 - added parameter to set nFactor nesting level
+# 2020 Dec 7 - sorted authentication policylabels so NextFactors are created first
 # 2019 Jun 3 - added RNAT; added OTP Push Service; added partitions; added Azure Keys
 # 2019 Apr 22 - added vServer VIP extraction from other commands (e.g. LDAP Action)
 # 2019 Apr 15 - fixed server enumeration
-# 2019 Apr 7 - reoredered Policy Expression output
+# 2019 Apr 7 - reordered Policy Expression output
 # 2019 Apr 1 - new "Sys" option to extract System Settings
 # 2019 Mar 6 - fixed Visualizer substring match, and added emailAction
 # 2018 Dec 27 - fix aaa tm trafficpolicy/action aaa kcdAccount output (BKF)
@@ -874,6 +880,7 @@ if ($nsObjects."sys") {
     addNSObject "ns mode" ($config -match "ns mode")
     addNSObject "system parameter" ($config -match "system parameter")
     addNSObject "ns encryptionParams" ($config -match "set ns encryptionParams")
+    addNSObject "ssl cipher" (getNSObjects $vserverConfig "ssl cipher" "-cipherName")
     
     # Get Networking Settings
     addNSObject "ns config" ($config -match "ns config")
@@ -1545,16 +1552,13 @@ if ($NSObjects."ssl vserver") {
 
 
 
-# Get Authentication Policies and Login Schemas from Authentication Policy Labels
+# Get Next Factors, Authentication Policies and Login Schemas from Authentication Policy Labels
 if ($NSObjects."authentication policylabel") {
-    # Get Next Factors
-    foreach ($policy in $NSObjects."authentication policylabel") {
-        addNSObject "authentication policylabel" (getNSObjects ($config -match " $policy ") "authentication policylabel" "-nextFactor")
-    }
-
-    # Get Next Factors Again (deeper level)
-    foreach ($policy in $NSObjects."authentication policylabel") {
-        addNSObject "authentication policylabel" (getNSObjects ($config -match " $policy ") "authentication policylabel" "-nextFactor")
+    # Get Next Factors; repeat multiple times for Next Factor nesting level
+    for ($i=0;$i -le $nFactorNestingLevel; $i++) {
+        foreach ($policy in $NSObjects."authentication policylabel") {
+            addNSObject "authentication policylabel" (getNSObjects ($config -match " $policy ") "authentication policylabel" "-nextFactor")
+        }
     }
 
     foreach ($policy in $NSObjects."authentication policylabel") {
@@ -1563,6 +1567,36 @@ if ($NSObjects."authentication policylabel") {
     }
 }
 
+
+# Sort the Policy Labels so Next Factors are created prior to policy bindings in earlier factors
+if ($NSObjects."authentication policylabel") {
+    $policyLabelsSorted = @()
+    foreach ($policyLabel in $NSObjects."authentication policylabel") {
+        $policyBindings = $config -match ('^bind authentication policylabel ' + $policyLabel + " -(policy|policyName) ")
+        $nextFactors = $policyBindings | select-string -Pattern ('-nextFactor (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value}
+        if (-not $nextFactors) {
+            $policyLabelsSorted = ,$policyLabel + $policyLabelsSorted
+        } else {
+            foreach ($nextFactor in $nextFactors) {
+                if ($policyLabelsSorted -contains $nextFactor) {
+                    $policyLabelsSorted = $policyLabelsSorted + ,$policyLabel
+                }
+            }
+        }
+    }
+    for ($i=0; $i -lt $nFactorNestingLevel; $i++) {
+        foreach ($policyLabel in $NSObjects."authentication policylabel") {
+            $policyBindings = $config -match ('^bind authentication policylabel ' + $policyLabel + " -(policy|policyName) ")
+            $nextFactors = $policyBindings | select-string -Pattern ('-nextFactor (".*?"|[^-"]\S+)') | ForEach-Object {$_.Matches.Groups[1].value}
+            foreach ($nextFactor in $nextFactors) {
+                if ($policyLabelsSorted -contains $nextFactor) {
+                    $policyLabelsSorted = $policyLabelsSorted + ,$policyLabel
+                }
+            }
+        }
+    }
+    $NSObjects."authentication policylabel" = $policyLabelsSorted
+}
 
 # Get Authentication Actions from Advanced Authentication Policies
 if ($NSObjects."authentication policy") {
@@ -1580,6 +1614,8 @@ if ($NSObjects."authentication policy") {
         addNSObject "authentication tacacsAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication tacacsAction")
         addNSObject "authentication webAuthAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication webAuthAction")
         addNSObject "authentication emailAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication emailAction")
+        addNSObject "authentication noAuthAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication noAuthAction")
+        addNSObject "authentication captchaAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication captchaAction")
     }
 }
 
@@ -2480,6 +2516,8 @@ if ($NSObjects."authentication storefrontAuthAction" ) { outputObjectConfig "Sto
 if ($NSObjects."authentication tacacsAction" ) { outputObjectConfig "TACACS Actions" "authentication tacacsAction" }
 if ($NSObjects."authentication webAuthAction" ) { outputObjectConfig "Web Auth Actions" "authentication webAuthAction" }
 if ($NSObjects."authentication emailAction" ) { outputObjectConfig "Email (SSPR) Actions" "authentication emailAction" }
+if ($NSObjects."authentication noAuthAction" ) { outputObjectConfig "NoAuth Actions" "authentication noAuthAction" }
+if ($NSObjects."authentication captchaAction" ) { outputObjectConfig "Captcha Actions" "authentication captchaAction" }
 if ($NSObjects."authentication adfsProxyProfile" ) { outputObjectConfig "ADFS Proxy Profile" "authentication adfsProxyProfile" }
 if ($NSObjects."authentication samlPolicy" ) { outputObjectConfig "SAML Authentication Policies" "authentication samlPolicy" }
 if ($NSObjects."authentication policy" ) { outputObjectConfig "Advanced Authentication Policies" "authentication policy" }
