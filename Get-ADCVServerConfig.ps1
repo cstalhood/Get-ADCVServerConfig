@@ -33,6 +33,7 @@ param (
 
 # Change Log
 # ----------
+# 2021 Feb 5 - fixed TACACS policies and Local Authentication Policies, including global
 # 2020 Dec 7 - added Captcha action and NoAuth action
 # 2020 Dec 7 - added parameter to set nFactor nesting level
 # 2020 Dec 7 - sorted authentication policylabels so NextFactors are created first
@@ -910,9 +911,11 @@ if ($nsObjects."sys") {
     addNSObject "authentication Policy" (getNSObjects ($config -match "system global") "authentication Policy")
     addNSObject "authentication ldapPolicy" (getNSObjects ($config -match "system global") "authentication ldapPolicy")
     addNSObject "authentication radiusPolicy" (getNSObjects ($config -match "system global") "authentication radiusPolicy")
+    addNSObject "authentication tacacsPolicy" (getNSObjects ($config -match "system global") "authentication tacacsPolicy")
+    addNSObject "authentication localPolicy" (getNSObjects ($config -match "system global") "authentication localPolicy")
     addNSObject "audit syslogPolicy" (getNSObjects ($config -match "bind system global") "audit syslogPolicy")
     addNSObject "audit syslogPolicy" (getNSObjects ($config -match "bind audit syslogGlobal") "audit syslogPolicy")
-    addNSObject "audit nslogPolicy" (getNSObjects ($config -match "bind system global") "audit nslogPolicy")
+    addNSObject "audit nslogPolicy" (getNSObjects ($config -match "bind system global") "audit nslogPolicy") 
     addNSObject "system user" (getNSObjects ($config -match "system user") "system user")
     addNSObject "system group" (getNSObjects ($config -match "system group") "system group")
     
@@ -2514,6 +2517,8 @@ if ($NSObjects."authentication epaAction" ) { outputObjectConfig "Endpoint Analy
 if ($NSObjects."authentication negotiateAction" ) { outputObjectConfig "Negotiate (Kerberos) Actions" "authentication negotiateAction" }
 if ($NSObjects."authentication storefrontAuthAction" ) { outputObjectConfig "StorefrontAuth Actions" "authentication storefrontAuthAction" }
 if ($NSObjects."authentication tacacsAction" ) { outputObjectConfig "TACACS Actions" "authentication tacacsAction" }
+if ($NSObjects."authentication tacacsPolicy" ) { outputObjectConfig "TACACS Policies" "authentication tacacsPolicy" }
+if ($NSObjects."authentication localPolicy" ) { outputObjectConfig "Local Authentication Policies" "authentication localPolicy" }
 if ($NSObjects."authentication webAuthAction" ) { outputObjectConfig "Web Auth Actions" "authentication webAuthAction" }
 if ($NSObjects."authentication emailAction" ) { outputObjectConfig "Email (SSPR) Actions" "authentication emailAction" }
 if ($NSObjects."authentication noAuthAction" ) { outputObjectConfig "NoAuth Actions" "authentication noAuthAction" }
