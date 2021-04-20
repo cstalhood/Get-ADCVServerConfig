@@ -33,6 +33,7 @@ param (
 
 # Change Log
 # ----------
+# 2021 Apr 20 - added DISABLED state to VIP selection screen
 # 2021 Feb 5 - fixed TACACS policies and Local Authentication Policies, including global
 # 2020 Dec 7 - added Captcha action and NoAuth action
 # 2020 Dec 7 - added parameter to set nFactor nesting level
@@ -676,6 +677,7 @@ function outputObjectConfig ($header, $NSObjectKey, $NSObjectType, $explainText)
     }
 }
 
+## Start main script
 
 # Clear configuration from last run
 $nsObjects = @{}
@@ -701,7 +703,7 @@ do {
     $vservers = @($vservers)
 
     # FirstLoop flag enables running script without prompting. 
-    # If second loop, then user must have changed the filter, and wants to see results, even if only one (or none).
+    # If second loop, then user must have changed the filter and wants to see results even if only one (or none).
     if (($vservers.length -eq 1 -and $firstLoop) -or $vservers -contains $vserver) { 
         # Get vServer Type
         $vserverType = $config -match " $vservers " | select-string -Pattern ('^add (\w+) vserver') | ForEach-Object {$_.Matches.Groups[1].value}
@@ -728,6 +730,12 @@ do {
         for ($x = 1; $x -lt $vservers.length; $x++) {
             $VIPs[$x] = $config -match "$vserver" | select-string -Pattern ('^add \w+ vserver ' + $vservers[$x] + ' \w+ (\d+\.\d+\.\d+\.\d+)') | ForEach-Object {$_.Matches.Groups[1].value}
         }
+		
+		# Get Enabled/Disabled State for each vServer so they can be displayed to the user
+        $States = @("") * ($vservers.length)
+        for ($x = 1; $x -lt $vservers.length; $x++) {
+            $States[$x] = $config -match "$vserver" | select-string -Pattern ('^add \w+ vserver ' + $vservers[$x] + ' .*? -state (\w+)') | ForEach-Object {$_.Matches.Groups[1].value}
+        }
 
         $selected = @("") * ($vservers.length)
     
@@ -738,6 +746,7 @@ do {
                 Type = $vserverTypes[$x]
                 Name = $vservers[$x]
                 VIP = $VIPs[$x]
+				State = $States[$x]
                 }
         }
         if ($IsMacOS){
