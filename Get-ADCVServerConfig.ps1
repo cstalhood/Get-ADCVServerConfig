@@ -33,6 +33,7 @@ param (
 
 # Change Log
 # ----------
+# 2021 Apr 27 - fixed sorting of Backup vServers
 # 2021 Apr 20 - added DISABLED state to VIP selection screen
 # 2021 Feb 5 - fixed TACACS policies and Local Authentication Policies, including global
 # 2020 Dec 7 - added Captcha action and NoAuth action
@@ -969,14 +970,20 @@ if ($nsObjects."cs vserver") {
     }
     
     foreach ($csvserver in $nsObjects."cs vserver") {
+        $currentVServers = $nsObjects."cs vserver"
+        $nsObjects."cs vserver" = @()   
         $vserverConfig = $config -match " $csvserver "
         # Backup VServers should be created before Active VServers
         $backupVServers = getNSObjects ($vserverConfig) "cs vserver" "-backupVServer"
         if ($backupVServers) {
-            $currentVServers = $nsObjects."cs vserver"
-            $nsObjects."cs vserver" = @()
             addNSObject "cs vserver" ($backupVServers)
-            $nsObjects."cs vserver" += $currentVServers
+            foreach ($vserver in $currentvservers) {
+                if ($backupVServers -notcontains $vserver) {
+                    addNSObject "cs vserver" ($vserver)
+                }
+            }
+        } else {
+            $nsObjects."cs vserver" = $currentVServers
         }
         addNSObject "lb vserver" (getNSObjects $vserverconfig "lb vserver" "-targetLBVserver")
     }
@@ -1063,14 +1070,20 @@ if ($NSObjects."cs policy") {
 # Look for Backup CR vServers
 if ($nsObjects."cr vserver") {
     foreach ($crvserver in $nsObjects."cr vserver") {
+        $currentVServers = $nsObjects."cr vserver"
+        $nsObjects."cr vserver" = @()   
         $vserverConfig = $config -match " $crvserver "
         # Backup VServers should be created before Active VServers
         $backupVServers = getNSObjects ($vserverConfig) "cr vserver" "-backupVServer"
         if ($backupVServers) {
-            $currentVServers = $nsObjects."cr vserver"
-            $nsObjects."cr vserver" = @()
             addNSObject "cr vserver" ($backupVServers)
-            $nsObjects."cr vserver" += $currentVServers
+            foreach ($vserver in $currentvservers) {
+                if ($backupVServers -notcontains $vserver) {
+                    addNSObject "cr vserver" ($vserver)
+                }
+            }
+        } else {
+            $nsObjects."cr vserver" = $currentVServers
         }
     }
 }
@@ -1153,14 +1166,20 @@ if ($NSObjects."cs policy") {
 # Look for Backup GSLB vServers
 if ($nsObjects."gslb vserver") {
     foreach ($gslbvserver in $nsObjects."gslb vserver") {
+        $currentVServers = $nsObjects."gslb vserver"
+        $nsObjects."gslb vserver" = @()   
         $vserverConfig = $config -match " $gslbvserver "
         # Backup VServers should be created before Active VServers
         $backupVServers = getNSObjects ($vserverConfig) "gslb vserver" "-backupVServer"
         if ($backupVServers) {
-            $currentVServers = $nsObjects."gslb vserver"
-            $nsObjects."gslb vserver" = @()
             addNSObject "gslb vserver" ($backupVServers)
-            $nsObjects."gslb vserver" += $currentVServers
+            foreach ($vserver in $currentvservers) {
+                if ($backupVServers -notcontains $vserver) {
+                    addNSObject "gslb vserver" ($vserver)
+                }
+            }
+        } else {
+            $nsObjects."gslb vserver" = $currentVServers
         }
     }
 }
@@ -1408,14 +1427,20 @@ if ($nsObjects."lb vserver") {
 # Look for Backup LB vServers
 if ($nsObjects."lb vserver") {
     foreach ($lbvserver in $nsObjects."lb vserver") {
+        $currentVServers = $nsObjects."lb vserver"
+        $nsObjects."lb vserver" = @()   
         $vserverConfig = $config -match " $lbvserver "
         # Backup VServers should be created before Active VServers
         $backupVServers = getNSObjects ($vserverConfig) "lb vserver" "-backupVServer"
         if ($backupVServers) {
-            $currentVServers = $nsObjects."lb vserver"
-            $nsObjects."lb vserver" = @()
             addNSObject "lb vserver" ($backupVServers)
-            $nsObjects."lb vserver" += $currentVServers
+            foreach ($vserver in $currentvservers) {
+                if ($backupVServers -notcontains $vserver) {
+                    addNSObject "lb vserver" ($vserver)
+                }
+            }
+        } else {
+            $nsObjects."lb vserver" = $currentVServers
         }
     }
 }
@@ -1609,6 +1634,7 @@ if ($NSObjects."authentication policylabel") {
     }
     $NSObjects."authentication policylabel" = $policyLabelsSorted
 }
+
 
 # Get Authentication Actions from Advanced Authentication Policies
 if ($NSObjects."authentication policy") {
