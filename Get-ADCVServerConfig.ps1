@@ -33,6 +33,7 @@ param (
 
 # Change Log
 # ----------
+# 2021 Apr 30 - added: get variables from expressions; get variable assignments from responders
 # 2021 Apr 27 - fixed sorting of Backup vServers
 # 2021 Apr 20 - added DISABLED state to VIP selection screen
 # 2021 Feb 5 - fixed TACACS policies and Local Authentication Policies, including global
@@ -363,6 +364,10 @@ function getNSObjects ($matchConfig, $NSObjectType, $paramName, $position) {
             $objectMatches += $objectCandidate
         } elseif (($matchConfig -match ('\.' + $objectCandidateDots + '(\.|"|\(| )'))) {
             # Look in Policy Expressions for Policy Extensions - .extension. or .extension" or .extension( or .extension 
+            
+            $objectMatches += $objectCandidate
+        } elseif (($matchConfig -match ('\$' + $objectCandidateDots))) {
+            # Look for variables 
             
             $objectMatches += $objectCandidate
         }
@@ -1948,6 +1953,7 @@ if ($NSObjects."responder policy") {
     foreach ($policy in $NSObjects."responder policy") {
         addNSObject "responder action" (getNSObjects ($config -match " responder policy $policy ") "responder action")
         addNSObject "audit messageaction" (getNSObjects ($config -match "responder policy $policy") "audit messageaction" "-logAction")
+        addNSObject "ns assignment" (getNSObjects ($config -match "responder policy $policy") "ns assignment")
     }
     if ($config -match "enable ns feature.* RESPONDER") {
         $NSObjects."responder param" = @("enable ns feature RESPONDER")
@@ -2350,15 +2356,6 @@ addNSObject "ns acl" ($config -match "ns simpleacl") "ns acl"
 addNSObject "rnat" (getNSObjects ($config -match "rnat ") "rnat")
 
 
-# Get assignments from variables
-if ($NSObjects."ns variable") {
-    foreach ($var in $NSObjects."ns variable") {
-        addNSObject "ns assignment" ($config -match " ns assignment .*? -variable \$" + $var) "ns assignment"
-    }
-    addNSObject "ssl global" ($config -match "bind ssl global ") "ssl global"
-}
-
-
 # Get Limit Selectors from Limit Identifiers
 if ($NSObjects."ns limitIdentifier") {
     foreach ($identifier in $NSObjects."ns limitIdentifier") {
@@ -2422,8 +2419,8 @@ if ($NSObjects."snmp alarm" ) { outputObjectConfig "SNMP Alarms" "snmp alarm" "r
 # Policy Expression Components and Profiles Output
 if ($NSObjects."ns acl" ) { outputObjectConfig "Global ACLs" "ns acl" "raw" }
 if ($NSObjects."rnat" ) { outputObjectConfig "Global RNAT" "rnat" }
-if ($NSObjects."ns variable" ) { outputObjectConfig "Variables" "ns variable" "raw" }
-if ($NSObjects."ns assignment" ) { outputObjectConfig "Variable Assignments" "ns assignment" "raw" }
+if ($NSObjects."ns variable" ) { outputObjectConfig "Variables" "ns variable" }
+if ($NSObjects."ns assignment" ) { outputObjectConfig "Variable Assignments" "ns assignment" }
 if ($NSObjects."ns limitSelector" ) { outputObjectConfig "Rate Limiting Selectors" "ns limitSelector" }
 if ($NSObjects."ns limitIdentifier" ) { outputObjectConfig "Rate Limiting Identifiers" "ns limitIdentifier" }
 if ($NSObjects."stream selector" ) { outputObjectConfig "Action Analytics Selectors" "stream selector" }
