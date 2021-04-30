@@ -33,6 +33,7 @@ param (
 
 # Change Log
 # ----------
+# 2021 Apr 30 - fixed named expressions
 # 2021 Apr 30 - added: get variables from expressions; get variable assignments from responders
 # 2021 Apr 27 - fixed sorting of Backup vServers
 # 2021 Apr 20 - added DISABLED state to VIP selection screen
@@ -152,6 +153,7 @@ function addNSObject ($NSObjectType, $NSObjectName) {
     
     foreach ($uniqueObject in $newObjects.InputObject) {
         $filteredConfig = $config -match "[^-\S]" + $NSObjectType + " " + $uniqueObject + "[^\S]"
+        if (!$filteredConfig) {$filteredConfig = $uniqueObject}
         
         
         # Look for Pattern Sets
@@ -366,8 +368,12 @@ function getNSObjects ($matchConfig, $NSObjectType, $paramName, $position) {
             # Look in Policy Expressions for Policy Extensions - .extension. or .extension" or .extension( or .extension 
             
             $objectMatches += $objectCandidate
-        } elseif (($matchConfig -match ('\$' + $objectCandidateDots))) {
+        } elseif (($NSObjectType -match "variable") -and ($matchConfig -match ('\$' + $objectCandidateDots))) {
             # Look for variables 
+            
+            $objectMatches += $objectCandidate
+        } elseif (($NSObjectType -match "expression") -and ($matchConfig -match ($objectCandidateDots + "\."))) {
+            # Look for named expressions that have dot operators after it
             
             $objectMatches += $objectCandidate
         }
