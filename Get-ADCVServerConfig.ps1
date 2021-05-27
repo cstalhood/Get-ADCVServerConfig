@@ -33,6 +33,7 @@ param (
 
 # Change Log
 # ----------
+# 2021 May 27 - added messageactions to output
 # 2021 Apr 30 - fixed named expressions
 # 2021 Apr 30 - added: get variables from expressions; get variable assignments from responders
 # 2021 Apr 27 - fixed sorting of Backup vServers
@@ -2450,6 +2451,7 @@ if ($NSObjects."netProfile" ) { outputObjectConfig "Net Profiles" "netProfile" }
 if ($NSObjects."ns trafficDomain" ) { outputObjectConfig "Traffic Domains" "ns trafficDomain" }
 if ($NSObjects."ipset" ) { outputObjectConfig "IP Sets" "ipset" }
 if ($NSObjects."analytics profile" ) { outputObjectConfig "Analytics Profiles" "analytics profile" }
+if ($NSObjects."audit messageaction" ) { outputObjectConfig "Log Messages" "audit messageaction" }
 
 
 # Policies Output
