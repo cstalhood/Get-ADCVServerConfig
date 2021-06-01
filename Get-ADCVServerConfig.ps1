@@ -33,6 +33,7 @@ param (
 
 # Change Log
 # ----------
+# 2021 Jun 1 - added search "policy expressions" for other appexpert objects
 # 2021 May 27 - added messageactions to output
 # 2021 Apr 30 - fixed named expressions
 # 2021 Apr 30 - added: get variables from expressions; get variable assignments from responders
@@ -197,8 +198,9 @@ function addNSObject ($NSObjectType, $NSObjectName) {
         if ($config -match "policy expression") {
             $foundObjects = getNSObjects $filteredConfig "policy expression"
             if ($foundObjects) { 
-                $nsObjects."policy expression" += $foundObjects
-                $nsObjects."policy expression" = @($nsObjects."policy expression" | Select-Object -Unique) 
+                addNsObject "policy expression" $foundObjects
+                #$nsObjects."policy expression" += $foundObjects
+                #$nsObjects."policy expression" = @($nsObjects."policy expression" | Select-Object -Unique) 
             }
         }
 
