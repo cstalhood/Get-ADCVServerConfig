@@ -22,7 +22,7 @@ param (
     #[string]$outputFile = "$env:HOME/Downloads/nsconfig.conf",
 
     # Optional text editor to open saved output file - text editor should handle UNIX line endings (e.g. Wordpad or Notepad++)
-    [string]$textEditor = "c:\Program Files (x86)\Notepad++\notepad++.exe",
+    [string]$textEditor = "notepad++.exe",
 
     # Optional get CSW vserver Binds for selected LB and/or VPN virtual server
     [switch]$cswBind,
@@ -33,6 +33,7 @@ param (
 
 # Change Log
 # ----------
+# 2021 Oct 15 - output SAML SSO Actions; performance improvements
 # 2021 Jun 1 - added search "policy expressions" for other appexpert objects
 # 2021 May 27 - added messageactions to output
 # 2021 Apr 30 - fixed named expressions
@@ -74,7 +75,6 @@ param (
 
 #  Start of script code
 cls
-
 
 #  Function to prompt the user for a NetScaler config file.
 #  The NetScaler config file can be found in the System > Diagnostics > Running Configuration location in the GUI
@@ -154,146 +154,151 @@ function addNSObject ($NSObjectType, $NSObjectName) {
     # Ensure there's whitespace before match to prevent substring matches (e.g. server matching MyServer)
     
     foreach ($uniqueObject in $newObjects.InputObject) {
+        #$timer.Restart()
         $filteredConfig = $config -match "[^-\S]" + $NSObjectType + " " + $uniqueObject + "[^\S]"
         if (!$filteredConfig) {$filteredConfig = $uniqueObject}
         
+        # Look in expressions for other objects
+        if ($filteredConfig -match '["|(]' ) {
+            # Look for Pattern Sets
+            if ($config -match "policy patset") {
+                $foundObjects = getNSObjects $filteredConfig "policy patset"
+                if ($foundObjects) { 
+                    $nsObjects."policy patset" += $foundObjects
+                    $nsObjects."policy patset" = @($nsObjects."policy patset" | Select-Object -Unique) 
+                }
+            }
+
+            # Look for Data Sets
+            if ($config -match "policy dataset") {
+                $foundObjects = getNSObjects $filteredConfig "policy dataset"
+                if ($foundObjects) { 
+                    $nsObjects."policy dataset" += $foundObjects
+                    $nsObjects."policy dataset" = @($nsObjects."policy dataset" | Select-Object -Unique) 
+                }
+            }
+
+            # Look for String Maps
+            if ($config -match "policy stringmap") {
+                $foundObjects = getNSObjects $filteredConfig "policy stringmap"
+                if ($foundObjects) { 
+                    $nsObjects."policy stringmap" += $foundObjects
+                    $nsObjects."policy stringmap" = @($nsObjects."policy stringmap" | Select-Object -Unique) 
+                }
+            }
         
-        # Look for Pattern Sets
-        if ($config -match "policy patset") {
-            $foundObjects = getNSObjects $filteredConfig "policy patset"
-            if ($foundObjects) { 
-                $nsObjects."policy patset" += $foundObjects
-                $nsObjects."policy patset" = @($nsObjects."policy patset" | Select-Object -Unique) 
-            }
-        }
-
-        # Look for Data Sets
-        if ($config -match "policy dataset") {
-            $foundObjects = getNSObjects $filteredConfig "policy dataset"
-            if ($foundObjects) { 
-                $nsObjects."policy dataset" += $foundObjects
-                $nsObjects."policy dataset" = @($nsObjects."policy dataset" | Select-Object -Unique) 
-            }
-        }
-
-        # Look for String Maps
-        if ($config -match "policy stringmap") {
-            $foundObjects = getNSObjects $filteredConfig "policy stringmap"
-            if ($foundObjects) { 
-                $nsObjects."policy stringmap" += $foundObjects
-                $nsObjects."policy stringmap" = @($nsObjects."policy stringmap" | Select-Object -Unique) 
-            }
-        }
-
-        # Look for URL Sets
-        if ($config -match "policy urlset") {
-            $foundObjects = getNSObjects $filteredConfig "policy urlset"
-            if ($foundObjects) { 
-                $nsObjects."policy urlset" += $foundObjects
-                $nsObjects."policy urlset" = @($nsObjects."policy urlset" | Select-Object -Unique) 
-            }
-        }
-
-        # Look for Expressions
-        if ($config -match "policy expression") {
-            $foundObjects = getNSObjects $filteredConfig "policy expression"
-            if ($foundObjects) { 
-                addNsObject "policy expression" $foundObjects
-                #$nsObjects."policy expression" += $foundObjects
-                #$nsObjects."policy expression" = @($nsObjects."policy expression" | Select-Object -Unique) 
-            }
-        }
-
-        # Look for Variables
-        if ($config -match "ns variable") {
-            $foundObjects = getNSObjects $filteredConfig "ns variable"
-            if ($foundObjects) { 
-                $nsObjects."ns variable" += $foundObjects
-                $nsObjects."ns variable" = @($nsObjects."ns variable" | Select-Object -Unique) 
-            }
-        }
-
-        # Look for Policy Maps
-        if ($config -match "policy map") {
-            $foundObjects = getNSObjects $filteredConfig "policy map"
-            if ($foundObjects) { 
-                $nsObjects."policy map" += $foundObjects
-                $nsObjects."policy map" = @($nsObjects."policy map" | Select-Object -Unique) 
-            }
-        }
-
-        # Look for Limit Identifiers
-        if ($config -match "ns limitIdentifier") {
-            $foundObjects = getNSObjects $filteredConfig "ns limitIdentifier"
-            if ($foundObjects) { 
-                $nsObjects."ns limitIdentifier" += $foundObjects
-                $nsObjects."ns limitIdentifier" = @($nsObjects."ns limitIdentifier" | Select-Object -Unique) 
-            }
-        }
-
-        # Look for Stream Identifiers
-        if ($config -match "stream identifier") {
-            $foundObjects = getNSObjects $filteredConfig "stream identifier"
-            if ($foundObjects) { 
-                $nsObjects."stream identifier" += $foundObjects
-                $nsObjects."stream identifier" = @($nsObjects."stream identifier" | Select-Object -Unique) 
-            }
-        }
-
-        # Look for Policy Extensions
-        if ($config -match "ns extension") {
-            $foundObjects = getNSObjects $filteredConfig "ns extension"
-            if ($foundObjects) { 
-                $nsObjects."ns extension" += $foundObjects
-                $nsObjects."ns extension" = @($nsObjects."ns extension" | Select-Object -Unique) 
-            }
-        }
-
-        # Look for Callouts
-        if ($filteredConfig -match "CALLOUT") {
-            if (!$nsObjects."policy httpCallout") { $nsObjects."policy httpCallout" = @()}
-            $nsObjects."policy httpCallout" += getNSObjects $filteredConfig "policy httpCallout"
-            $nsObjects."policy httpCallout" = @($nsObjects."policy httpCallout" | Select-Object -Unique)
-        }
-
-        # Look for DNS Records
-        $foundObjects = getNSObjects $filteredConfig "dns addRec"
-        if ($foundObjects) 
-        { 
-            $nsObjects."dns addRec" += $foundObjects
-            $nsObjects."dns addRec" = @($nsObjects."dns addRec" | Select-Object -Unique) 
-        }
-        $foundObjects = getNSObjects $filteredConfig "dns nsRec"
-        if ($foundObjects) 
-        { 
-            $nsObjects."dns nsRec" += $foundObjects
-            $nsObjects."dns nsRec" = @($nsObjects."dns nsRec" | Select-Object -Unique) 
-        }
-
-        # Look for vServer VIPs
-        if ($filteredConfig -match "\d+\.\d+\.\d+\.\d+" -and $NSObjectType -notmatch " vserver") {
-            $objectsToAdd = getNSObjects $filteredConfig "lb vserver"
-            if ($objectsToAdd) {
-                if (!$nsObjects."lb vserver") { $nsObjects."lb vserver" = @()}
-                $nsObjects."lb vserver" += getNSObjects $filteredConfig "lb vserver"
-                $nsObjects."lb vserver" = @($nsObjects."lb vserver" | Select-Object -Unique)
-                GetLBvServerBindings $objectsToAdd
+            # Look for URL Sets
+            if ($config -match "policy urlset") {
+                $foundObjects = getNSObjects $filteredConfig "policy urlset"
+                if ($foundObjects) { 
+                    $nsObjects."policy urlset" += $foundObjects
+                    $nsObjects."policy urlset" = @($nsObjects."policy urlset" | Select-Object -Unique) 
+                }
             }
             
-            $objectsToAdd = getNSObjects $filteredConfig "cs vserver"
-            if ($objectsToAdd) {
-                if (!$nsObjects."cs vserver") { $nsObjects."cs vserver" = @()}
-                $nsObjects."cs vserver" += getNSObjects $filteredConfig "cs vserver"
-                $nsObjects."cs vserver" = @($nsObjects."cs vserver" | Select-Object -Unique)
+            # Look for Expressions
+            if ($config -match "policy expression") {
+                $foundObjects = getNSObjects $filteredConfig "policy expression"
+                if ($foundObjects) { 
+                    addNsObject "policy expression" $foundObjects
+                    #$nsObjects."policy expression" += $foundObjects
+                    #$nsObjects."policy expression" = @($nsObjects."policy expression" | Select-Object -Unique) 
+                }
             }
 
-            $objectsToAdd = getNSObjects $filteredConfig "vpn vserver"
-            if ($objectsToAdd) {
-                if (!$nsObjects."vpn vserver") { $nsObjects."vpn vserver" = @()}
-                $nsObjects."vpn vserver" += getNSObjects $filteredConfig "vpn vserver"
-                $nsObjects."vpn vserver" = @($nsObjects."vpn vserver" | Select-Object -Unique)
+            # Look for Variables
+            if ($config -match "ns variable") {
+                $foundObjects = getNSObjects $filteredConfig "ns variable"
+                if ($foundObjects) { 
+                    $nsObjects."ns variable" += $foundObjects
+                    $nsObjects."ns variable" = @($nsObjects."ns variable" | Select-Object -Unique) 
+                }
+            }
+
+            # Look for Policy Maps
+            if ($config -match "policy map") {
+                $foundObjects = getNSObjects $filteredConfig "policy map"
+                if ($foundObjects) { 
+                    $nsObjects."policy map" += $foundObjects
+                    $nsObjects."policy map" = @($nsObjects."policy map" | Select-Object -Unique) 
+                }
+            }
+
+            # Look for Limit Identifiers
+            if ($config -match "ns limitIdentifier") {
+                $foundObjects = getNSObjects $filteredConfig "ns limitIdentifier"
+                if ($foundObjects) { 
+                    $nsObjects."ns limitIdentifier" += $foundObjects
+                    $nsObjects."ns limitIdentifier" = @($nsObjects."ns limitIdentifier" | Select-Object -Unique) 
+                }
+            }
+
+            # Look for Stream Identifiers
+            if ($config -match "stream identifier") {
+                $foundObjects = getNSObjects $filteredConfig "stream identifier"
+                if ($foundObjects) { 
+                    $nsObjects."stream identifier" += $foundObjects
+                    $nsObjects."stream identifier" = @($nsObjects."stream identifier" | Select-Object -Unique) 
+                }
+            }
+
+            # Look for Policy Extensions
+            if ($config -match "ns extension") {
+                $foundObjects = getNSObjects $filteredConfig "ns extension"
+                if ($foundObjects) { 
+                    $nsObjects."ns extension" += $foundObjects
+                    $nsObjects."ns extension" = @($nsObjects."ns extension" | Select-Object -Unique) 
+                }
+            }
+
+            # Look for Callouts
+            if ($filteredConfig -match "CALLOUT") {
+                if (!$nsObjects."policy httpCallout") { $nsObjects."policy httpCallout" = @()}
+                $nsObjects."policy httpCallout" += getNSObjects $filteredConfig "policy httpCallout"
+                $nsObjects."policy httpCallout" = @($nsObjects."policy httpCallout" | Select-Object -Unique)
+            }
+
+        
+            # Look for DNS Records
+            $foundObjects = getNSObjects $filteredConfig "dns addRec"
+            if ($foundObjects) 
+            { 
+                $nsObjects."dns addRec" += $foundObjects
+                $nsObjects."dns addRec" = @($nsObjects."dns addRec" | Select-Object -Unique) 
+            }
+            $foundObjects = getNSObjects $filteredConfig "dns nsRec"
+            if ($foundObjects) 
+            { 
+                $nsObjects."dns nsRec" += $foundObjects
+                $nsObjects."dns nsRec" = @($nsObjects."dns nsRec" | Select-Object -Unique) 
+            }
+        
+            # Look for vServer VIPs
+            if ($filteredConfig -match "\d+\.\d+\.\d+\.\d+" -and $NSObjectType -notmatch " vserver") {
+                $objectsToAdd = getNSObjects $filteredConfig "lb vserver"
+                if ($objectsToAdd) {
+                    if (!$nsObjects."lb vserver") { $nsObjects."lb vserver" = @()}
+                    $nsObjects."lb vserver" += getNSObjects $filteredConfig "lb vserver"
+                    $nsObjects."lb vserver" = @($nsObjects."lb vserver" | Select-Object -Unique)
+                    GetLBvServerBindings $objectsToAdd
+                }
+            
+                $objectsToAdd = getNSObjects $filteredConfig "cs vserver"
+                if ($objectsToAdd) {
+                    if (!$nsObjects."cs vserver") { $nsObjects."cs vserver" = @()}
+                    $nsObjects."cs vserver" += getNSObjects $filteredConfig "cs vserver"
+                    $nsObjects."cs vserver" = @($nsObjects."cs vserver" | Select-Object -Unique)
+                }
+
+                $objectsToAdd = getNSObjects $filteredConfig "vpn vserver"
+                if ($objectsToAdd) {
+                    if (!$nsObjects."vpn vserver") { $nsObjects."vpn vserver" = @()}
+                    $nsObjects."vpn vserver" += getNSObjects $filteredConfig "vpn vserver"
+                    $nsObjects."vpn vserver" = @($nsObjects."vpn vserver" | Select-Object -Unique)
+                }
             }
         }
+        
     }
 }
 
@@ -305,8 +310,15 @@ function getNSObjects ($matchConfig, $NSObjectType, $paramName, $position) {
     }
     
     # Read all objects of type from from full config
-    $objectsAll = $config | select-string -Pattern ('^(add|set|bind) ' + $NSObjectType + ' (".*?"|[^-"]\S+)($| )') | ForEach-Object {$_.Matches.Groups[2].value}
-    $objectsAll = $objectsAll | Where-Object { $nsObjects.$NSObjectType -notcontains $_ }
+    # Cache objects to speed up multiple iterations of this function
+    if ($nsObjectsCache.$NSObjectType) {
+        $objectsAll = $nsObjectsCache.$NSObjectType
+    } else {
+        $objectsAll = $config | select-string -Pattern ('^(add|set|bind) ' + $NSObjectType + ' (".*?"|[^-"]\S+)($| )') | ForEach-Object {$_.Matches.Groups[2].value}
+        $objectsAll = $objectsAll | Where-Object { $nsObjects.$NSObjectType -notcontains $_ }
+        $objectsAll = $objectsAll | sort-object -Unique
+        $nsObjectsCache.$NSObjectType = $objectsAll
+    }
     
     # if looking for matching vServers, also match on VIPs
     if ($NSObjectType -match " vserver") {
@@ -696,9 +708,11 @@ function outputObjectConfig ($header, $NSObjectKey, $NSObjectType, $explainText)
 
 # Clear configuration from last run
 $nsObjects = @{}
+$nsObjectsCache = @{}
 
 $selectionDone =$false
 $firstLoop = $true
+
 
 do {
     # Get matching vServer Names. If more than one, prompt for selection.
@@ -733,23 +747,30 @@ do {
         # Get vServer Type for each vServer name - later display to user
         $vserverTypes = @("") * ($vservers.length)
         $vserverTypes[0] = "sys"
-        for ($x = 1; $x -lt $vservers.length; $x++) {
-            $vserverTypes[$x] = $config -match "$vserver" | select-string -Pattern ('^add (\w+) vserver ' + $vservers[$x] + " ") | ForEach-Object {$_.Matches.Groups[1].value}
+        
+        if ($vserver) {
+            $vserverConfig = $config -match "$vserver"
+        } else {
+            $vserverConfig = $config -match "add (\w+) vserver"
         }
         
+        for ($x = 1; $x -lt $vservers.length; $x++) {
+            $vserverTypes[$x] = $vserverConfig | select-string -Pattern ('^add (\w+) vserver ' + $vservers[$x] + " ") | ForEach-Object {$_.Matches.Groups[1].value}
+        }
+   
         # Change "authentication" to "aaa" so it fits within 4 char column
         $vserverTypes = $vserverTypes -replace "authentication", "aaa"
     
         # Get VIPs for each vServer so they can be displayed to the user
         $VIPs = @("") * ($vservers.length)
         for ($x = 1; $x -lt $vservers.length; $x++) {
-            $VIPs[$x] = $config -match "$vserver" | select-string -Pattern ('^add \w+ vserver ' + $vservers[$x] + ' \w+ (\d+\.\d+\.\d+\.\d+)') | ForEach-Object {$_.Matches.Groups[1].value}
+            $VIPs[$x] = $vserverConfig | select-string -Pattern ('^add \w+ vserver ' + $vservers[$x] + ' \w+ (\d+\.\d+\.\d+\.\d+)') | ForEach-Object {$_.Matches.Groups[1].value}
         }
 		
 		# Get Enabled/Disabled State for each vServer so they can be displayed to the user
         $States = @("") * ($vservers.length)
         for ($x = 1; $x -lt $vservers.length; $x++) {
-            $States[$x] = $config -match "$vserver" | select-string -Pattern ('^add \w+ vserver ' + $vservers[$x] + ' .*? -state (\w+)') | ForEach-Object {$_.Matches.Groups[1].value}
+            $States[$x] = $vserverConfig | select-string -Pattern ('^add \w+ vserver ' + $vservers[$x] + ' .*? -state (\w+)') | ForEach-Object {$_.Matches.Groups[1].value}
         }
 
         $selected = @("") * ($vservers.length)
@@ -888,9 +909,9 @@ if (!$outputFile) { $outputFile = Get-OutputFile $outputfile }
 
 "`nLooking for objects associated with selected vServers: `n" + ($vservers -join "`n") + "`n"
 
-$Timer = [system.diagnostics.stopwatch]::StartNew()
+#$Timer = [system.diagnostics.stopwatch]::StartNew()
 
-# Get DNS Servers
+# Get System Objects
 if ($nsObjects."sys") {
     addNSObject "ns partition" (getNSObjects ($config -match "add ns partition") "ns partition")
     addNSObject "dns nameServer" (getNSObjects ($config -match "add dns nameServer") "dns nameServer")
@@ -944,7 +965,6 @@ if ($nsObjects."sys") {
     addNSObject "system group" (getNSObjects ($config -match "system group") "system group")
     
 }
-
 
 # If $cswBind switch is true, look for CS vServers that the LB, AAA, and/or VPN vServers are bound to.
 if ($cswBind){
@@ -1053,7 +1073,6 @@ if ($nsObjects."cs vserver") {
     }
 }
 
-
 # Get CSW Policies from CSW Policy Labels
 if ($NSObjects."cs policylabel") {
     foreach ($policy in $NSObjects."cs policylabel") {
@@ -1142,7 +1161,6 @@ if ($nsObjects."cr vserver") {
     }
 }
 
-
 # Get Message Actions from CR Policies
 if ($NSObjects."cr policy") {
     foreach ($policy in $NSObjects."cr policy") {
@@ -1176,6 +1194,7 @@ if ($NSObjects."cs policy") {
     }
 }
 
+#write-host ("cs action objects: " + $timer.elapsed.TotalSeconds)
 
 # Look for Backup GSLB vServers
 if ($nsObjects."gslb vserver") {
@@ -2576,6 +2595,7 @@ if ($NSObjects."tm sessionPolicy" ) { outputObjectConfig "AAA Session Policies" 
 if ($NSObjects."authentication vserver" ) { outputObjectConfig "Authentication Virtual Servers" "authentication vserver" }
 if ($NSObjects."authentication authnProfile" ) { outputObjectConfig "Authentication Profiles" "authentication authnProfile" }
 if ($NSObjects."tm formSSOAction" ) { outputObjectConfig "AAA Form SSO Profiles" "tm formSSOAction" }
+if ($NSObjects."tm samlSSOProfile" ) { outputObjectConfig "AAA SAML SSO Profiles" "tm samlSSOProfile" }
 if ($NSObjects."tm trafficAction" ) { outputObjectConfig "AAA Traffic Profiles" "tm trafficAction" }
 if ($NSObjects."tm trafficPolicy" ) { outputObjectConfig "AAA Traffic Policies" "tm trafficPolicy" }
 if ($NSObjects."tm global" ) { outputObjectConfig "AAA Global Bindings" "tm global" "raw" }
@@ -2610,6 +2630,7 @@ if ($NSObjects."rdp clientprofile" ) { outputObjectConfig "Citrix Gateway RDP Pr
 if ($NSObjects."vpn pcoipProfile" ) { outputObjectConfig "Citrix Gateway PCoIP Profiles" "vpn pcoipProfile" }
 if ($NSObjects."vpn pcoipVserverProfile" ) { outputObjectConfig "Citrix Gateway VServer PCoIP Profiles" "vpn pcoipVserverProfile" }
 if ($NSObjects."vpn formSSOAction" ) { outputObjectConfig "Citrix Gateway Form SSO Profiles" "vpn formSSOAction" }
+if ($NSObjects."vpn samlSSOProfile" ) { outputObjectConfig "Citrix Gateway SAML SSO Profiles" "vpn samlSSOProfile" }
 if ($NSObjects."vpn trafficAction" ) { outputObjectConfig "Citrix Gateway Traffic Profiles" "vpn trafficAction" }
 if ($NSObjects."vpn trafficPolicy" ) { outputObjectConfig "Citrix Gateway Traffic Policies" "vpn trafficPolicy" }
 if ($NSObjects."vpn alwaysONProfile" ) { outputObjectConfig "Citrix Gateway AlwaysON Profiles" "vpn alwaysONProfile" }
@@ -2662,15 +2683,15 @@ if ($textEditor -and ($outputFile -and ($outputFile -ne "screen"))) {
 
     # Open Text Editor
 
-    if (Test-Path $textEditor -PathType Leaf){
+    #if (Test-Path $textEditor -PathType Leaf){
 
         write-host "`nOpening Output file `"$outputFile`" using `"$textEditor`" ..."
 
         start-process -FilePath $textEditor -ArgumentList "`"$outputFile`""
 
-    } else { 
+    <#} else { 
         write-host "`nText Editor not found: `"$textEditor`"" 
         write-host "`nCan't open output file: `"$outputFile`""
-    }
+    }#>
 
 }
