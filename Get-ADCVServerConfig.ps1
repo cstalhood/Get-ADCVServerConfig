@@ -33,6 +33,7 @@ param (
 
 # Change Log
 # ----------
+# 2021 Nov 4 - performance improvements
 # 2021 Oct 15 - output SAML SSO Actions; performance improvements
 # 2021 Jun 1 - added search "policy expressions" for other appexpert objects
 # 2021 May 27 - added messageactions to output
@@ -127,179 +128,179 @@ if (!$configFile) { exit }
 $config = ""
 $config = Get-Content $configFile -ErrorAction Stop
 
+function printProgress ($origObjects, $NSObjectType) {
+    # Check if anything was added and display
+    $newObjects = @()
+    if (-not $origObjects) {
+        $newObjects = $nsObjects.$NSObjectType
+    } else {
+        $newObjects = (Compare-Object $origObjects $nsObjects.$NSObjectType).InputObject
+    }
+    if ($newObjects)
+    {
+        foreach ($newObject in $newObjects) { 
+            write-host (("Found {0,-25} " -f $NSObjectType) + $newObject)
+        }
+    }
+    return $newObjects
+}
+
+function getMatchExpression ($Objects) {
+    # returns a regex clause with multiple objects or'd to speed up regex matching
+    $matchExpression = "("
+    foreach ($uniqueObject in $Objects) {
+        $matchExpression += $uniqueObject + "|" 
+    }
+    $matchExpression = $matchExpression.Substring(0,$matchExpression.length - 1) + ")"
+    return $matchExpression
+}
 
 function addNSObject ($NSObjectType, $NSObjectName) {
     if (!$NSObjectName) { return }
     # write-host $NSObjectType $NSObjectName  #Debug
     if (!$nsObjects.$NSObjectType) { $nsObjects.$NSObjectType = @()}
-    $tempObjects = $nsObjects.$NSObjectType
+    $origObjects = $nsObjects.$NSObjectType
     $nsObjects.$NSObjectType += $NSObjectName
     $nsObjects.$NSObjectType = @($nsObjects.$NSObjectType | Select-Object -Unique)
 
-    # Check if anything was added and display - exit function if nothing new
-    $newObjects =@()
-    $newObjects = Compare-Object $tempObjects $nsObjects.$NSObjectType
+    $newObjects = printProgress $origObjects $NSObjectType
     if (!$newObjects) {return}
-    
-    # Display progress
-    foreach ($newObject in $newObjects) { 
-        write-host (("Found {0,-25} " -f $NSObjectType) + $newObject.InputObject )
-        #write-host ("In " + $timer.ElapsedMilliseconds + " ms, found $NSObjectType`t " + $newObject.InputObject)
-        #$timer.Stop()
-        #$timer.Restart()
-    }
     
     # Get Filtered Config for the object being added to check for policy sub-objects
     # Don't match "-" to prevent "add serviceGroup -netProfile"
     # Ensure there's whitespace before match to prevent substring matches (e.g. server matching MyServer)
     
-    foreach ($uniqueObject in $newObjects.InputObject) {
-        #$timer.Restart()
-        $filteredConfig = $config -match "[^-\S]" + $NSObjectType + " " + $uniqueObject + "[^\S]"
-        if (!$filteredConfig) {$filteredConfig = $uniqueObject}
-        
-        # Look in expressions for other objects
-        if ($filteredConfig -match '["|(]' ) {
-            # Look for Pattern Sets
-            if ($config -match "policy patset") {
-                $foundObjects = getNSObjects $filteredConfig "policy patset"
-                if ($foundObjects) { 
-                    $nsObjects."policy patset" += $foundObjects
-                    $nsObjects."policy patset" = @($nsObjects."policy patset" | Select-Object -Unique) 
-                }
-            }
+    $filteredConfig = ""
+    
+    $matchExpression = getMatchExpression $newObjects 
+    $filteredConfig = $config -match "[^-\S]" + $NSObjectType + " " + $matchExpression + "[^\S]"
+    if (!$filteredConfig) {$filteredConfig = $uniqueObject}
+    
+    # Look in expressions for other objects
+    if ($filteredConfig -match '["|(]' ) {
+        # Look for Pattern Sets
+        $foundObjects = getNSObjects $filteredConfig "policy patset"
+        if ($foundObjects) { 
+            $origObjects = $nsObjects."policy patset"
+            $nsObjects."policy patset" += $foundObjects
+            $nsObjects."policy patset" = @($nsObjects."policy patset" | Select-Object -Unique)
+            $newObjects = printProgress $origObjects "policy patset"
+        }
 
-            # Look for Data Sets
-            if ($config -match "policy dataset") {
-                $foundObjects = getNSObjects $filteredConfig "policy dataset"
-                if ($foundObjects) { 
-                    $nsObjects."policy dataset" += $foundObjects
-                    $nsObjects."policy dataset" = @($nsObjects."policy dataset" | Select-Object -Unique) 
-                }
-            }
+        # Look for Data Sets
+        $foundObjects = getNSObjects $filteredConfig "policy dataset"
+        if ($foundObjects) { 
+            $nsObjects."policy dataset" += $foundObjects
+            $nsObjects."policy dataset" = @($nsObjects."policy dataset" | Select-Object -Unique) 
+        }
 
-            # Look for String Maps
-            if ($config -match "policy stringmap") {
-                $foundObjects = getNSObjects $filteredConfig "policy stringmap"
-                if ($foundObjects) { 
-                    $nsObjects."policy stringmap" += $foundObjects
-                    $nsObjects."policy stringmap" = @($nsObjects."policy stringmap" | Select-Object -Unique) 
-                }
-            }
-        
-            # Look for URL Sets
-            if ($config -match "policy urlset") {
-                $foundObjects = getNSObjects $filteredConfig "policy urlset"
-                if ($foundObjects) { 
-                    $nsObjects."policy urlset" += $foundObjects
-                    $nsObjects."policy urlset" = @($nsObjects."policy urlset" | Select-Object -Unique) 
-                }
-            }
-            
-            # Look for Expressions
-            if ($config -match "policy expression") {
-                $foundObjects = getNSObjects $filteredConfig "policy expression"
-                if ($foundObjects) { 
-                    addNsObject "policy expression" $foundObjects
-                    #$nsObjects."policy expression" += $foundObjects
-                    #$nsObjects."policy expression" = @($nsObjects."policy expression" | Select-Object -Unique) 
-                }
-            }
-
-            # Look for Variables
-            if ($config -match "ns variable") {
-                $foundObjects = getNSObjects $filteredConfig "ns variable"
-                if ($foundObjects) { 
-                    $nsObjects."ns variable" += $foundObjects
-                    $nsObjects."ns variable" = @($nsObjects."ns variable" | Select-Object -Unique) 
-                }
-            }
-
-            # Look for Policy Maps
-            if ($config -match "policy map") {
-                $foundObjects = getNSObjects $filteredConfig "policy map"
-                if ($foundObjects) { 
-                    $nsObjects."policy map" += $foundObjects
-                    $nsObjects."policy map" = @($nsObjects."policy map" | Select-Object -Unique) 
-                }
-            }
-
-            # Look for Limit Identifiers
-            if ($config -match "ns limitIdentifier") {
-                $foundObjects = getNSObjects $filteredConfig "ns limitIdentifier"
-                if ($foundObjects) { 
-                    $nsObjects."ns limitIdentifier" += $foundObjects
-                    $nsObjects."ns limitIdentifier" = @($nsObjects."ns limitIdentifier" | Select-Object -Unique) 
-                }
-            }
-
-            # Look for Stream Identifiers
-            if ($config -match "stream identifier") {
-                $foundObjects = getNSObjects $filteredConfig "stream identifier"
-                if ($foundObjects) { 
-                    $nsObjects."stream identifier" += $foundObjects
-                    $nsObjects."stream identifier" = @($nsObjects."stream identifier" | Select-Object -Unique) 
-                }
-            }
-
-            # Look for Policy Extensions
-            if ($config -match "ns extension") {
-                $foundObjects = getNSObjects $filteredConfig "ns extension"
-                if ($foundObjects) { 
-                    $nsObjects."ns extension" += $foundObjects
-                    $nsObjects."ns extension" = @($nsObjects."ns extension" | Select-Object -Unique) 
-                }
-            }
-
-            # Look for Callouts
-            if ($filteredConfig -match "CALLOUT") {
-                if (!$nsObjects."policy httpCallout") { $nsObjects."policy httpCallout" = @()}
-                $nsObjects."policy httpCallout" += getNSObjects $filteredConfig "policy httpCallout"
-                $nsObjects."policy httpCallout" = @($nsObjects."policy httpCallout" | Select-Object -Unique)
-            }
-
-        
-            # Look for DNS Records
-            $foundObjects = getNSObjects $filteredConfig "dns addRec"
-            if ($foundObjects) 
-            { 
-                $nsObjects."dns addRec" += $foundObjects
-                $nsObjects."dns addRec" = @($nsObjects."dns addRec" | Select-Object -Unique) 
-            }
-            $foundObjects = getNSObjects $filteredConfig "dns nsRec"
-            if ($foundObjects) 
-            { 
-                $nsObjects."dns nsRec" += $foundObjects
-                $nsObjects."dns nsRec" = @($nsObjects."dns nsRec" | Select-Object -Unique) 
-            }
-        
-            # Look for vServer VIPs
-            if ($filteredConfig -match "\d+\.\d+\.\d+\.\d+" -and $NSObjectType -notmatch " vserver") {
-                $objectsToAdd = getNSObjects $filteredConfig "lb vserver"
-                if ($objectsToAdd) {
-                    if (!$nsObjects."lb vserver") { $nsObjects."lb vserver" = @()}
-                    $nsObjects."lb vserver" += getNSObjects $filteredConfig "lb vserver"
-                    $nsObjects."lb vserver" = @($nsObjects."lb vserver" | Select-Object -Unique)
-                    GetLBvServerBindings $objectsToAdd
-                }
-            
-                $objectsToAdd = getNSObjects $filteredConfig "cs vserver"
-                if ($objectsToAdd) {
-                    if (!$nsObjects."cs vserver") { $nsObjects."cs vserver" = @()}
-                    $nsObjects."cs vserver" += getNSObjects $filteredConfig "cs vserver"
-                    $nsObjects."cs vserver" = @($nsObjects."cs vserver" | Select-Object -Unique)
-                }
-
-                $objectsToAdd = getNSObjects $filteredConfig "vpn vserver"
-                if ($objectsToAdd) {
-                    if (!$nsObjects."vpn vserver") { $nsObjects."vpn vserver" = @()}
-                    $nsObjects."vpn vserver" += getNSObjects $filteredConfig "vpn vserver"
-                    $nsObjects."vpn vserver" = @($nsObjects."vpn vserver" | Select-Object -Unique)
-                }
-            }
+        # Look for String Maps
+        $foundObjects = getNSObjects $filteredConfig "policy stringmap"
+        if ($foundObjects) { 
+            $nsObjects."policy stringmap" += $foundObjects
+            $nsObjects."policy stringmap" = @($nsObjects."policy stringmap" | Select-Object -Unique) 
         }
         
+        # Look for URL Sets
+        $foundObjects = getNSObjects $filteredConfig "policy urlset"
+        if ($foundObjects) { 
+            $nsObjects."policy urlset" += $foundObjects
+            $nsObjects."policy urlset" = @($nsObjects."policy urlset" | Select-Object -Unique) 
+        }
+            
+        # Look for Expressions
+        $foundObjects = getNSObjects $filteredConfig "policy expression"
+        if ($foundObjects) { 
+            addNsObject "policy expression" $foundObjects
+            #$nsObjects."policy expression" += $foundObjects
+            #$nsObjects."policy expression" = @($nsObjects."policy expression" | Select-Object -Unique)    
+        }
+
+        # Look for Variables
+        $foundObjects = getNSObjects $filteredConfig "ns variable"
+        if ($foundObjects) { 
+            $nsObjects."ns variable" += $foundObjects
+            $nsObjects."ns variable" = @($nsObjects."ns variable" | Select-Object -Unique) 
+        }
+
+        # Look for Policy Maps
+        $foundObjects = getNSObjects $filteredConfig "policy map"
+        if ($foundObjects) { 
+            $nsObjects."policy map" += $foundObjects
+            $nsObjects."policy map" = @($nsObjects."policy map" | Select-Object -Unique) 
+        }
+
+        # Look for Limit Identifiers
+        $foundObjects = getNSObjects $filteredConfig "ns limitIdentifier"
+        if ($foundObjects) { 
+            $nsObjects."ns limitIdentifier" += $foundObjects
+            $nsObjects."ns limitIdentifier" = @($nsObjects."ns limitIdentifier" | Select-Object -Unique) 
+        }
+
+        # Look for Stream Identifiers
+        $foundObjects = getNSObjects $filteredConfig "stream identifier"
+        if ($foundObjects) { 
+            $nsObjects."stream identifier" += $foundObjects
+            $nsObjects."stream identifier" = @($nsObjects."stream identifier" | Select-Object -Unique) 
+        }
+
+        # Look for Policy Extensions
+        $foundObjects = getNSObjects $filteredConfig "ns extension"
+        if ($foundObjects) { 
+            $origObjects = $nsObjects."ns extension"
+            $nsObjects."ns extension" += $foundObjects
+            $nsObjects."ns extension" = @($nsObjects."ns extension" | Select-Object -Unique)
+            printProgress $origObjects "ns extension"
+        }
+
+        # Look for Callouts
+        if ($filteredConfig -match "CALLOUT") {
+            if (!$nsObjects."policy httpCallout") { $nsObjects."policy httpCallout" = @()}
+            $nsObjects."policy httpCallout" += getNSObjects $filteredConfig "policy httpCallout"
+            $nsObjects."policy httpCallout" = @($nsObjects."policy httpCallout" | Select-Object -Unique)
+        }
+
+        
+        # Look for DNS Records
+        $foundObjects = getNSObjects $filteredConfig "dns addRec"
+        if ($foundObjects) 
+        { 
+            $nsObjects."dns addRec" += $foundObjects
+            $nsObjects."dns addRec" = @($nsObjects."dns addRec" | Select-Object -Unique) 
+        }
+        $foundObjects = getNSObjects $filteredConfig "dns nsRec"
+        if ($foundObjects) 
+        { 
+            $nsObjects."dns nsRec" += $foundObjects
+            $nsObjects."dns nsRec" = @($nsObjects."dns nsRec" | Select-Object -Unique) 
+        }
+        
+        # Look for vServer VIPs
+        if ($filteredConfig -match "\d+\.\d+\.\d+\.\d+" -and $NSObjectType -notmatch " vserver") {
+            $objectsToAdd = getNSObjects $filteredConfig "lb vserver"
+            if ($objectsToAdd) {
+                if (!$nsObjects."lb vserver") { $nsObjects."lb vserver" = @()}
+                $nsObjects."lb vserver" += getNSObjects $filteredConfig "lb vserver"
+                $nsObjects."lb vserver" = @($nsObjects."lb vserver" | Select-Object -Unique)
+                GetLBvServerBindings $objectsToAdd
+            }
+            
+            $objectsToAdd = getNSObjects $filteredConfig "cs vserver"
+            if ($objectsToAdd) {
+                if (!$nsObjects."cs vserver") { $nsObjects."cs vserver" = @()}
+                $nsObjects."cs vserver" += getNSObjects $filteredConfig "cs vserver"
+                $nsObjects."cs vserver" = @($nsObjects."cs vserver" | Select-Object -Unique)
+            }
+
+            $objectsToAdd = getNSObjects $filteredConfig "vpn vserver"
+            if ($objectsToAdd) {
+                if (!$nsObjects."vpn vserver") { $nsObjects."vpn vserver" = @()}
+                $nsObjects."vpn vserver" += getNSObjects $filteredConfig "vpn vserver"
+                $nsObjects."vpn vserver" = @($nsObjects."vpn vserver" | Select-Object -Unique)
+            }
+        }
     }
+        
 }
 
 
@@ -320,6 +321,8 @@ function getNSObjects ($matchConfig, $NSObjectType, $paramName, $position) {
         $nsObjectsCache.$NSObjectType = $objectsAll
     }
     
+	if ($objectsAll.length -eq 0) {return}
+	
     # if looking for matching vServers, also match on VIPs
     if ($NSObjectType -match " vserver") {
         $VIPsAll = $config | select-string -Pattern ('^add ' + $NSObjectType + ' (".*?"|[^-"]\S+) \S+ (\d+\.\d+\.\d+\.\d+) (\d+)') | ForEach-Object {
@@ -387,7 +390,7 @@ function getNSObjects ($matchConfig, $NSObjectType, $paramName, $position) {
             # Look for variables 
             
             $objectMatches += $objectCandidate
-        } elseif (($NSObjectType -match "expression") -and ($matchConfig -match ($objectCandidateDots + "\."))) {
+        } elseif (($NSObjectType -match "expression") -and (($matchConfig -match ($objectCandidateDots + "\.") -or ($matchConfig -match ($objectCandidateDots + '\"'))))) {
             # Look for named expressions that have dot operators after it
             
             $objectMatches += $objectCandidate
@@ -437,13 +440,15 @@ function getNSObjects ($matchConfig, $NSObjectType, $paramName, $position) {
 
 function GetLBvServerBindings ($objectsList) {
 
-    foreach ($lbvserver in $objectsList) {
-        $vserverConfig = $config -match " lb vserver $lbvserver "
+    $matchExpression = getMatchExpression $objectsList
+    #foreach ($lbvserver in $objectsList) {
+        $vserverConfig = $config -match " lb vserver $matchExpression "
         addNSObject "service" (getNSObjects $vserverConfig "service")
         if ($NSObjects.service) {
-            foreach ($service in $NSObjects.service) { 
+            $serviceMatchExpression = getMatchExpression $NSObjects.service
+            #foreach ($service in $NSObjects.service) { 
                 # wrap config matches in spaces to avoid substring matches
-                $serviceConfig = $config -match " service $service "
+                $serviceConfig = $config -match " service $serviceMatchExpression "
                 addNSObject "monitor" (getNSObjects $serviceConfig "lb monitor" "-monitorName")
                 addNSObject "server" (getNSObjects $serviceConfig "server")
                 addNSObject "ssl profile" (getNSObjects $serviceConfig "ssl profile")
@@ -453,12 +458,13 @@ function GetLBvServerBindings ($objectsList) {
                 addNSObject "ssl cipher" (getNSObjects $serviceConfig "ssl cipher")
                 addNSObject "ssl certKey" (getNSObjects $serviceConfig "ssl certKey" "-certkeyName")
                 addNSObject "ssl certKey" (getNSObjects $serviceConfig "ssl certKey" "-cacert")
-            }
+            #}
         }
         addNSObject "serviceGroup" (getNSObjects $vserverConfig "serviceGroup")
         if ($NSObjects.serviceGroup) {
-            foreach ($serviceGroup in $NSObjects.serviceGroup) {
-                $serviceConfig = $config -match " serviceGroup $serviceGroup "
+            $serviceGrouMatchExpression = getMatchExpression $NSObjects.serviceGroup
+            #foreach ($serviceGroup in $NSObjects.serviceGroup) {
+                $serviceConfig = $config -match " serviceGroup $serviceGrouMatchExpression "
                 addNSObject "monitor" (getNSObjects $serviceConfig "lb monitor" "-monitorName")
                 addNSObject "server" (getNSObjects $serviceConfig "server")
                 addNSObject "ssl profile" (getNSObjects $serviceConfig "ssl profile")
@@ -468,7 +474,7 @@ function GetLBvServerBindings ($objectsList) {
                 addNSObject "ssl cipher" (getNSObjects $serviceConfig "ssl cipher")
                 addNSObject "ssl certKey" (getNSObjects $serviceConfig "ssl certKey" "-certkeyName")
                 addNSObject "ssl certKey" (getNSObjects $serviceConfig "ssl certKey" "-cacert")
-            }
+            #}
         }
         addNSObject "netProfile" (getNSObjects $vserverConfig "netProfile" "-netProfile")
         addNSObject "ns trafficDomain" (getNSObjects $vserverConfig "ns trafficDomain" "-td")
@@ -481,7 +487,7 @@ function GetLBvServerBindings ($objectsList) {
         addNSObject "ssl profile" (getNSObjects $vserverConfig "ssl profile")
         addNSObject "ssl certKey" (getNSObjects $vserverConfig "ssl certKey" "-certkeyName")
         addNSObject "ssl certKey" (getNSObjects $vserverConfig "ssl certKey" "-cacert")
-        addNSObject "ssl vserver" (getNSObjects ($config -match "ssl vserver $lbvserver ") "ssl vserver")
+        addNSObject "ssl vserver" (getNSObjects ($config -match "ssl vserver $matchExpression ") "ssl vserver")
         addNSObject "responder policy" (getNSObjects $vserverConfig "responder policy" "-policyName")
         addNSObject "responder policylabel" (getNSObjects $vserverConfig "responder policylabel" "policylabel")
         addNSObject "rewrite policy" (getNSObjects $vserverConfig "rewrite policy" "-policyName")
@@ -510,7 +516,7 @@ function GetLBvServerBindings ($objectsList) {
         addNSObject "lb profile" (getNSObjects $vserverConfig "lb profile" "-lbprofilename")
         addNSObject "ipset" (getNSObjects $vserverConfig "ipset" "-ipset")
         addNSObject "authentication adfsProxyProfile" (getNSObjects $vserverConfig "authentication adfsProxyProfile" "-adfsProxyProfile")
-    }
+    #}
 
 }
 
@@ -909,7 +915,7 @@ if (!$outputFile) { $outputFile = Get-OutputFile $outputfile }
 
 "`nLooking for objects associated with selected vServers: `n" + ($vservers -join "`n") + "`n"
 
-#$Timer = [system.diagnostics.stopwatch]::StartNew()
+$Timer = [system.diagnostics.stopwatch]::StartNew()
 
 # Get System Objects
 if ($nsObjects."sys") {
@@ -1073,6 +1079,8 @@ if ($nsObjects."cs vserver") {
     }
 }
 
+# write-host ("cs objects: " + $timer.elapsed.TotalSeconds)
+
 # Get CSW Policies from CSW Policy Labels
 if ($NSObjects."cs policylabel") {
     foreach ($policy in $NSObjects."cs policylabel") {
@@ -1083,19 +1091,18 @@ if ($NSObjects."cs policylabel") {
 
 # Get CSW Actions from CSW Policies
 if ($NSObjects."cs policy") {
-    foreach ($policy in $NSObjects."cs policy") {
-        addNSObject "cs action" (getNSObjects ($config -match " $policy ") "cs action")
-        addNSObject "audit messageaction" (getNSObjects ($config -match "cr policy $policy") "audit messageaction" "-logAction")
+    $matchExpression = getMatchExpression $NSObjects."cs policy" 
+    addNSObject "cs action" (getNSObjects ($config -match " $matchExpression ") "cs action")
+    addNSObject "audit messageaction" (getNSObjects ($config -match "cr policy $matchExpression") "audit messageaction" "-logAction")
 
-    }
     # Get vServers linked to CSW Actions
     if ($NSObjects."cs action") {
-        foreach ($action in $NSObjects."cs action") {
-            addNSObject "lb vserver" (getNSObjects ($config -match " $action ") "lb vserver" "-targetLBVserver")
-            addNSObject "vpn vserver" (getNSObjects ($config -match " $action ") "vpn vserver" "-targetVserver")
-            addNSObject "authentication vserver" (getNSObjects ($config -match " $action ") "authentication vserver" "-targetVserver")
-            addNSObject "gslb vserver" (getNSObjects ($config -match " $action ") "gslb vserver" "-targetVserver")
-        }
+        $matchExpression = getMatchExpression $NSObjects."cs action"
+        $filteredConfig = $config -match " $matchExpression "
+        addNSObject "lb vserver" (getNSObjects ($filteredConfig) "lb vserver" "-targetLBVserver")
+        addNSObject "vpn vserver" (getNSObjects ($filteredConfig) "vpn vserver" "-targetVserver")
+        addNSObject "authentication vserver" (getNSObjects ($filteredConfig) "authentication vserver" "-targetVserver")
+        addNSObject "gslb vserver" (getNSObjects ($filteredConfig) "gslb vserver" "-targetVserver")
     }
 }
 
@@ -1179,22 +1186,21 @@ if ($NSObjects."cs policylabel") {
 
 # Get CSW Actions from CSW Policies
 if ($NSObjects."cs policy") {
-    foreach ($policy in $NSObjects."cs policy") {
-        addNSObject "cs action" (getNSObjects ($config -match " $policy ") "cs action")
-        addNSObject "audit messageaction" (getNSObjects ($config -match "cr policy $policy") "audit messageaction" "-logAction")
+    $matchExpression = getMatchExpression $NSObjects."cs policy"
+    addNSObject "cs action" (getNSObjects ($config -match " $matchExpression ") "cs action")
+    addNSObject "audit messageaction" (getNSObjects ($config -match "cs policy $matchExpression") "audit messageaction" "-logAction")
 
-    }
     # Get vServers linked to CSW Actions
     if ($NSObjects."cs action") {
+        $matchExpression = getMatchExpression $NSObjects."cs action"
+        $filteredConfig = $config -match " $matchExpression "
         foreach ($action in $NSObjects."cs action") {
-            addNSObject "lb vserver" (getNSObjects ($config -match " $action ") "lb vserver" "-targetLBVserver")
-            addNSObject "vpn vserver" (getNSObjects ($config -match " $action ") "vpn vserver" "-targetVserver")
-            addNSObject "gslb vserver" (getNSObjects ($config -match " $action ") "gslb vserver" "-targetVserver")
+        addNSObject "lb vserver" (getNSObjects ( $filteredConfig) "lb vserver" "-targetLBVserver")
+        addNSObject "vpn vserver" (getNSObjects ( $filteredConfig) "vpn vserver" "-targetVserver")
+        addNSObject "gslb vserver" (getNSObjects ( $filteredConfig) "gslb vserver" "-targetVserver")
         }
     }
 }
-
-#write-host ("cs action objects: " + $timer.elapsed.TotalSeconds)
 
 # Look for Backup GSLB vServers
 if ($nsObjects."gslb vserver") {
@@ -1382,18 +1388,17 @@ if ($NSObjects."cs policylabel") {
 
 # Get CSW Actions from CSW Policies
 if ($NSObjects."cs policy") {
-    foreach ($policy in $NSObjects."cs policy") {
-        addNSObject "cs action" (getNSObjects ($config -match " $policy ") "cs action")
-        addNSObject "audit messageaction" (getNSObjects ($config -match "cr policy $policy") "audit messageaction" "-logAction")
+    $matchExpression = GetMatchExpression $NSObjects."cs policy"
+    addNSObject "cs action" (getNSObjects ($config -match " $matchExpression ") "cs action")
+    addNSObject "audit messageaction" (getNSObjects ($config -match "cs policy $matchExpression") "audit messageaction" "-logAction")
 
-    }
     # Get vServers linked to CSW Actions
     if ($NSObjects."cs action") {
-        foreach ($action in $NSObjects."cs action") {
-            addNSObject "lb vserver" (getNSObjects ($config -match " $action ") "lb vserver" "-targetLBVserver")
-            addNSObject "vpn vserver" (getNSObjects ($config -match " $action ") "vpn vserver" "-targetVserver")
-            addNSObject "gslb vserver" (getNSObjects ($config -match " $action ") "gslb vserver" "-targetVserver")
-        }
+        $matchExpression = GetMatchExpression $NSObjects."cs action"
+        $filteredConfig = $config -match " $matchExpression "
+        addNSObject "lb vserver" (getNSObjects ($filteredConfig) "lb vserver" "-targetLBVserver")
+        addNSObject "vpn vserver" (getNSObjects ($filteredConfig) "vpn vserver" "-targetVserver")
+        addNSObject "gslb vserver" (getNSObjects ($filteredConfig) "gslb vserver" "-targetVserver")
     }
 }
 
@@ -1445,13 +1450,12 @@ if ($nsObjects."vpn global") {
 
 # Look for LB Persistency Groups
 if ($nsObjects."lb vserver") {
-    foreach ($lbvserver in $nsObjects."lb vserver") {
-        $vserverConfig = $config -match " $lbvserver$"
-        addNSObject "lb group" (getNSObjects ($vserverConfig) "lb group")
-        if ($nsObjects."lb group") {
-            foreach ($lbgroup in $NSObjects."lb group") { 
-                addNSObject "lb vserver" (getNSObjects ($config -match "lb group " + $lbgroup) "lb vserver")
-            }
+    $matchExpression = getMatchExpression $nsObjects."lb vserver"
+    $vserverConfig = $config -match " $matchExpression$"
+    addNSObject "lb group" (getNSObjects ($vserverConfig) "lb group")
+    if ($nsObjects."lb group") {
+        foreach ($lbgroup in $NSObjects."lb group") { 
+            addNSObject "lb vserver" (getNSObjects ($config -match "lb group " + $lbgroup) "lb vserver")
         }
     }
 }
@@ -1459,10 +1463,10 @@ if ($nsObjects."lb vserver") {
 
 # Look for Backup LB vServers
 if ($nsObjects."lb vserver") {
-    foreach ($lbvserver in $nsObjects."lb vserver") {
+    $matchExpression = getMatchExpression $nsObjects."lb vserver"
         $currentVServers = $nsObjects."lb vserver"
         $nsObjects."lb vserver" = @()   
-        $vserverConfig = $config -match " $lbvserver "
+        $vserverConfig = $config -match " $matchExpression "
         # Backup VServers should be created before Active VServers
         $backupVServers = getNSObjects ($vserverConfig) "lb vserver" "-backupVServer"
         if ($backupVServers) {
@@ -1475,7 +1479,6 @@ if ($nsObjects."lb vserver") {
         } else {
             $nsObjects."lb vserver" = $currentVServers
         }
-    }
 }
 
 
@@ -1560,64 +1563,62 @@ if ($NSObjects."authentication vserver") {
     } else {
         $NSObjects."authentication param" = @("# *** AAA feature is not enabled")
     }
-    foreach ($authVServer in $NSObjects."authentication vserver") {
-        $vserverConfig = $config -match " $authVServer "
-        addNSObject "ns trafficDomain" (getNSObjects $vserverConfig "ns trafficDomain" "-td")
-        addNSObject "authentication ldapPolicy" (getNSObjects $vserverConfig "authentication ldapPolicy")
-        addNSObject "authentication radiusPolicy" (getNSObjects $vserverConfig "authentication radiusPolicy")
-        addNSObject "authentication policy" (getNSObjects $vserverConfig "authentication policy")
-        addNSObject "authentication samlIdPPolicy" (getNSObjects $vserverConfig "authentication samlIdPPolicy")
-        addNSObject "authentication samlPolicy" (getNSObjects $vserverConfig "authentication samlPolicy")
-        addNSObject "authentication certPolicy" (getNSObjects $vserverConfig "authentication certPolicy")
-        addNSObject "authentication dfaPolicy" (getNSObjects $vserverConfig "authentication dfaPolicy")
-        addNSObject "authentication localPolicy" (getNSObjects $vserverConfig "authentication localPolicy")
-        addNSObject "authentication negotiatePolicy" (getNSObjects $vserverConfig "authentication negotiatePolicy")
-        addNSObject "authentication tacacsPolicy" (getNSObjects $vserverConfig "authentication tacacsPolicy")
-        addNSObject "authentication webAuthPolicy" (getNSObjects $vserverConfig "authentication webAuthPolicy")
-        addNSObject "tm sessionPolicy" (getNSObjects $vserverConfig "tm sessionPolicy")
-        addNSObject "vpn portaltheme" (getNSObjects $vserverConfig "vpn portaltheme" "-portaltheme")
-        addNSObject "authentication loginSchemaPolicy" (getNSObjects $vserverConfig "authentication loginSchemaPolicy")
-        addNSObject "authentication policylabel" (getNSObjects $vserverConfig "authentication policylabel" "-nextFactor")
-        addNSObject "audit syslogPolicy" (getNSObjects $vserverConfig "audit syslogPolicy" "-policy")
-        addNSObject "audit nslogPolicy" (getNSObjects $vserverConfig "audit nslogPolicy" "-policy")
-        addNSObject "cs policy" (getNSObjects $vserverConfig "cs policy" "-policy")
-        addNSObject "ssl policy" (getNSObjects $vserverConfig "ssl policy" "-policy")
-        addNSObject "ssl cipher" (getNSObjects $vserverConfig "ssl cipher" "-cipherName")
-        addNSObject "ssl profile" (getNSObjects $vserverConfig "ssl profile")
-        addNSObject "ssl certKey" (getNSObjects $vserverConfig "ssl certKey" "-certkeyName")
-        addNSObject "ssl certKey" (getNSObjects $vserverConfig "ssl certKey" "-cacert")
-        addNSObject "ssl vserver" (getNSObjects ($config -match "ssl vserver $authVServer ") "ssl vserver")
-    }
+    $matchExpression = getMatchExpression $NSObjects."authentication vserver"
+    $vserverConfig = $config -match " $matchExpression "
+    addNSObject "ns trafficDomain" (getNSObjects $vserverConfig "ns trafficDomain" "-td")
+    addNSObject "authentication ldapPolicy" (getNSObjects $vserverConfig "authentication ldapPolicy")
+    addNSObject "authentication radiusPolicy" (getNSObjects $vserverConfig "authentication radiusPolicy")
+    addNSObject "authentication policy" (getNSObjects $vserverConfig "authentication policy")
+    addNSObject "authentication samlIdPPolicy" (getNSObjects $vserverConfig "authentication samlIdPPolicy")
+    addNSObject "authentication samlPolicy" (getNSObjects $vserverConfig "authentication samlPolicy")
+    addNSObject "authentication certPolicy" (getNSObjects $vserverConfig "authentication certPolicy")
+    addNSObject "authentication dfaPolicy" (getNSObjects $vserverConfig "authentication dfaPolicy")
+    addNSObject "authentication localPolicy" (getNSObjects $vserverConfig "authentication localPolicy")
+    addNSObject "authentication negotiatePolicy" (getNSObjects $vserverConfig "authentication negotiatePolicy")
+    addNSObject "authentication tacacsPolicy" (getNSObjects $vserverConfig "authentication tacacsPolicy")
+    addNSObject "authentication webAuthPolicy" (getNSObjects $vserverConfig "authentication webAuthPolicy")
+    addNSObject "tm sessionPolicy" (getNSObjects $vserverConfig "tm sessionPolicy")
+    addNSObject "vpn portaltheme" (getNSObjects $vserverConfig "vpn portaltheme" "-portaltheme")
+    addNSObject "authentication loginSchemaPolicy" (getNSObjects $vserverConfig "authentication loginSchemaPolicy")
+    addNSObject "authentication policylabel" (getNSObjects $vserverConfig "authentication policylabel" "-nextFactor")
+    addNSObject "audit syslogPolicy" (getNSObjects $vserverConfig "audit syslogPolicy" "-policy")
+    addNSObject "audit nslogPolicy" (getNSObjects $vserverConfig "audit nslogPolicy" "-policy")
+    addNSObject "cs policy" (getNSObjects $vserverConfig "cs policy" "-policy")
+    addNSObject "ssl policy" (getNSObjects $vserverConfig "ssl policy" "-policy")
+    addNSObject "ssl cipher" (getNSObjects $vserverConfig "ssl cipher" "-cipherName")
+    addNSObject "ssl profile" (getNSObjects $vserverConfig "ssl profile")
+    addNSObject "ssl certKey" (getNSObjects $vserverConfig "ssl certKey" "-certkeyName")
+    addNSObject "ssl certKey" (getNSObjects $vserverConfig "ssl certKey" "-cacert")
+    addNSObject "ssl vserver" (getNSObjects ($config -match "ssl vserver $authVServer ") "ssl vserver")
 }
 
 
 # Get CSW Actions from CSW Policies
 if ($NSObjects."cs policy") {
-    foreach ($policy in $NSObjects."cs policy") {
-        addNSObject "cs action" (getNSObjects ($config -match " $policy ") "cs action")
-        addNSObject "audit messageaction" (getNSObjects ($config -match "cr policy $policy") "audit messageaction" "-logAction")
+    $matchExpression = getMatchExpression $NSObjects."cs policy"
+    addNSObject "cs action" (getNSObjects ($config -match " $matchExpression ") "cs action")
+    addNSObject "audit messageaction" (getNSObjects ($config -match "cr policy $policy") "audit messageaction" "-logAction")
 
-    }
     # Get vServers linked to CSW Actions
     if ($NSObjects."cs action") {
-        foreach ($action in $NSObjects."cs action") {
-            addNSObject "lb vserver" (getNSObjects ($config -match " $action ") "lb vserver" "-targetLBVserver")
-            addNSObject "vpn vserver" (getNSObjects ($config -match " $action ") "vpn vserver" "-targetVserver")
-            addNSObject "gslb vserver" (getNSObjects ($config -match " $action ") "gslb vserver" "-targetVserver")
-        }
+        $matchExpression = getMatchExpression $NSObjects."cs action"
+        $filteredConfig = $config -match " $matchExpression "
+        addNSObject "lb vserver" (getNSObjects ($filteredConfig) "lb vserver" "-targetLBVserver")
+        addNSObject "vpn vserver" (getNSObjects ($filteredConfig) "vpn vserver" "-targetVserver")
+        addNSObject "gslb vserver" (getNSObjects ($filteredConfig) "gslb vserver" "-targetVserver")
     }
 }
 
 
 # Get SSL Objects from SSL vServers
 if ($NSObjects."ssl vserver") {
-    foreach ($vserver in $NSObjects."ssl vserver") {
-        addNSObject "ssl cipher" (getNSObjects ($config -match " ssl vserver $vserver ") "ssl cipher" "-cipherName")
-        addNSObject "ssl certKey" (getNSObjects ($config -match " ssl vserver $vserver ") "ssl certKey" "-certkeyName")
-        addNSObject "ssl certKey" (getNSObjects ($config -match " ssl vserver $vserver ") "ssl certKey" "-cacert")
-        addNSObject "ssl logprofile" (getNSObjects ($config -match " ssl vserver $vserver ") "ssl logprofile" "-ssllogprofile")
-        addNSObject "ssl profile" (getNSObjects ($config -match " ssl vserver $vserver ") "ssl profile" "-sslProfile")
-    }
+    $matchExpression = getMatchExpression $NSObjects."ssl vserver"
+    $filteredConfig = $config -match " ssl vserver $matchExpression "
+    addNSObject "ssl cipher" (getNSObjects ($filteredConfig) "ssl cipher" "-cipherName")
+    addNSObject "ssl certKey" (getNSObjects ($filteredConfig) "ssl certKey" "-certkeyName")
+    addNSObject "ssl certKey" (getNSObjects ($filteredConfig) "ssl certKey" "-cacert")
+    addNSObject "ssl logprofile" (getNSObjects ($filteredConfig) "ssl logprofile" "-ssllogprofile")
+    addNSObject "ssl profile" (getNSObjects ($filteredConfig) "ssl profile" "-sslProfile")
 }
 
 
@@ -1671,23 +1672,23 @@ if ($NSObjects."authentication policylabel") {
 
 # Get Authentication Actions from Advanced Authentication Policies
 if ($NSObjects."authentication policy") {
-    foreach ($policy in $NSObjects."authentication policy") {
-        addNSObject "authentication ldapAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication ldapAction")
-        addNSObject "audit messageaction" (getNSObjects ($config -match "authentication policy $policy") "audit messageaction" "-logAction")
-        addNSObject "authentication radiusAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication radiusAction")
-        addNSObject "authentication samlAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication samlAction" -position 4)
-        addNSObject "authentication certAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication certAction")
-        addNSObject "authentication dfaAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication dfaAction")
-        addNSObject "authentication epaAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication epaAction")
-        addNSObject "authentication negotiateAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication negotiateAction")
-        addNSObject "authentication OAuthAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication OAuthAction")
-        addNSObject "authentication storefrontAuthAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication storefrontAuthAction")
-        addNSObject "authentication tacacsAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication tacacsAction")
-        addNSObject "authentication webAuthAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication webAuthAction")
-        addNSObject "authentication emailAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication emailAction")
-        addNSObject "authentication noAuthAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication noAuthAction")
-        addNSObject "authentication captchaAction" (getNSObjects ($config -match "authentication policy $policy ") "authentication captchaAction")
-    }
+    $matchExpression = getMatchExpression $NSObjects."authentication policy"
+    $filteredConfig = $config -match "authentication policy $matchExpression "
+    addNSObject "authentication ldapAction" (getNSObjects ($filteredConfig) "authentication ldapAction")
+    addNSObject "audit messageaction" (getNSObjects ($filteredConfig) "audit messageaction" "-logAction")
+    addNSObject "authentication radiusAction" (getNSObjects ($filteredConfig) "authentication radiusAction")
+    addNSObject "authentication samlAction" (getNSObjects ($filteredConfig) "authentication samlAction" -position 4)
+    addNSObject "authentication certAction" (getNSObjects ($filteredConfig) "authentication certAction")
+    addNSObject "authentication dfaAction" (getNSObjects ($filteredConfig) "authentication dfaAction")
+    addNSObject "authentication epaAction" (getNSObjects ($filteredConfig) "authentication epaAction")
+    addNSObject "authentication negotiateAction" (getNSObjects ($filteredConfig) "authentication negotiateAction")
+    addNSObject "authentication OAuthAction" (getNSObjects ($filteredConfig) "authentication OAuthAction")
+    addNSObject "authentication storefrontAuthAction" (getNSObjects ($filteredConfig) "authentication storefrontAuthAction")
+    addNSObject "authentication tacacsAction" (getNSObjects ($filteredConfig) "authentication tacacsAction")
+    addNSObject "authentication webAuthAction" (getNSObjects ($filteredConfig) "authentication webAuthAction")
+    addNSObject "authentication emailAction" (getNSObjects ($filteredConfig) "authentication emailAction")
+    addNSObject "authentication noAuthAction" (getNSObjects ($filteredConfig) "authentication noAuthAction")
+    addNSObject "authentication captchaAction" (getNSObjects ($filteredConfig) "authentication captchaAction")
 }
 
 
@@ -1759,21 +1760,24 @@ if ($NSObjects."authentication samlIdPPolicy") {
 
 # Get SAML Actions from SAML Authentication Policies
 if ($NSObjects."authentication samlPolicy") {
-    foreach ($policy in $NSObjects."authentication samlPolicy") {
-        addNSObject "authentication samlAction" (getNSObjects ($config -match "authentication samlPolicy $policy ") "authentication samlAction" -position 4)
-    }
+    $matchExpression = GetMatchExpression $NSObjects."authentication samlPolicy"
+    addNSObject "authentication samlAction" (getNSObjects ($config -match "authentication samlPolicy $matchExpression ") "authentication samlAction" -position 4)
 }
 
 
 # Get SSL Certificates from SAML Actions, SAML Profiles, and ADFS Proxy Profiles
-foreach ($action in $NSObjects."authentication samlAction") {
-    addNSObject "ssl certKey" (getNSObjects ($config -match "authentication samlAction $action ") "ssl certKey" "-samlIdPCertName")
-    addNSObject "ssl certKey" (getNSObjects ($config -match "authentication samlAction $action ") "ssl certKey" "-samlSigningCertName")
+if ($NSObjects."authentication samlAction") {
+    $matchExpression = GetMatchExpression $NSObjects."authentication samlAction"
+    $filteredConfig = $config -match "authentication samlAction $matchExpression "
+    addNSObject "ssl certKey" (getNSObjects ($filteredConfig) "ssl certKey" "-samlIdPCertName")
+    addNSObject "ssl certKey" (getNSObjects ($filteredConfig) "ssl certKey" "-samlSigningCertName")
 }
 
-foreach ($action in $NSObjects."authentication samlIdPProfile") {
-    addNSObject "ssl certKey" (getNSObjects ($config -match "authentication samlIdPProfile $action ") "ssl certKey" "-samlIdPCertName")
-    addNSObject "ssl certKey" (getNSObjects ($config -match "authentication samlIdPProfile $action ") "ssl certKey" "-samlSPCertName")
+if ($NSObjects."authentication samlIdPProfile") {
+    $matchExpression = GetMatchExpression $NSObjects."authentication samlIdPProfile"
+    $filteredConfig = $config -match "authentication samlIdPProfile $matchExpression "
+    addNSObject "ssl certKey" (getNSObjects ($filteredConfig) "ssl certKey" "-samlIdPCertName")
+    addNSObject "ssl certKey" (getNSObjects ($filteredConfig) "ssl certKey" "-samlSPCertName")
 }
 
 foreach ($action in $NSObjects."authentication adfsProxyProfile") {
@@ -1978,11 +1982,11 @@ if ($NSObjects."responder policylabel") {
 
 # Get Responder Actions and Responder Global Settings
 if ($NSObjects."responder policy") {
-    foreach ($policy in $NSObjects."responder policy") {
-        addNSObject "responder action" (getNSObjects ($config -match " responder policy $policy ") "responder action")
-        addNSObject "audit messageaction" (getNSObjects ($config -match "responder policy $policy") "audit messageaction" "-logAction")
-        addNSObject "ns assignment" (getNSObjects ($config -match "responder policy $policy") "ns assignment")
-    }
+    $matchExpression = getMatchExpression $NSObjects."responder policy"
+    $filteredConfig = $config -match " responder policy $matchExpression "
+    addNSObject "responder action" (getNSObjects ($filteredConfig) "responder action")
+    addNSObject "audit messageaction" (getNSObjects ($filteredConfig) "audit messageaction" "-logAction")
+    addNSObject "ns assignment" (getNSObjects ($filteredConfig) "ns assignment")
     if ($config -match "enable ns feature.* RESPONDER") {
         $NSObjects."responder param" = @("enable ns feature RESPONDER")
     } else {
@@ -2001,18 +2005,18 @@ addNSObject "rewrite policylabel" (getNSObjects ($config -match "bind rewrite gl
 
 # Get Rewrite Policies from Rewrite Policy Labels
 if ($NSObjects."rewrite policylabel") {
-    foreach ($policy in $NSObjects."rewrite policylabel") {
-        addNSObject "rewrite Policy" (getNSObjects ($config -match " $policy ") "rewrite Policy")
-    }
+    $matchExpression = getMatchExpression $NSObjects."rewrite policylabel"
+    addNSObject "rewrite Policy" (getNSObjects ($config -match " $matchExpression ") "rewrite Policy")
 }
 
 
 # Get Rewrite Actions and Rewrite Global Settings
 if ($NSObjects."rewrite policy") {
-    foreach ($policy in $NSObjects."rewrite policy") {
-        addNSObject "rewrite action" (getNSObjects ($config -match "rewrite policy $policy ") "rewrite action")
-        addNSObject "audit messageaction" (getNSObjects ($config -match "rewrite policy $policy") "audit messageaction" "-logAction")
-    }
+    $matchExpression = getMatchExpression $NSObjects."rewrite policy"
+    $filteredConfig = $config -match "rewrite policy $matchExpression "
+    addNSObject "rewrite action" (getNSObjects ($filteredConfig) "rewrite action")
+    addNSObject "audit messageaction" (getNSObjects ($filteredConfig) "audit messageaction" "-logAction")
+
     if ($config -match "enable ns feature.* rewrite") {
         $NSObjects."rewrite param" = @("enable ns feature rewrite")
     } else {
@@ -2053,28 +2057,28 @@ if ($NSObjects."cmp policy") {
 
 
 # Get global bound Traffic Management Policies
-addNSObject "tm trafficPolicy" (getNSObjects ($config -match "bind tm global") "tm trafficPolicy")
-addNSObject "tm sessionPolicy" (getNSObjects ($config -match "bind tm global") "tm sessionPolicy")
-addNSObject "audit syslogPolicy" (getNSObjects ($config -match "bind tm global") "audit syslogPolicy")
-addNSObject "audit nslogPolicy" (getNSObjects ($config -match "bind tm global") "audit nslogPolicy")
-addNSObject "tm global" ($config -match "bind tm global ") "tm global"
+$filteredConfig = $config -match "bind tm global"
+addNSObject "tm trafficPolicy" (getNSObjects ($filteredConfig) "tm trafficPolicy")
+addNSObject "tm sessionPolicy" (getNSObjects ($filteredConfig) "tm sessionPolicy")
+addNSObject "audit syslogPolicy" (getNSObjects ($filteredConfig) "audit syslogPolicy")
+addNSObject "audit nslogPolicy" (getNSObjects ($filteredConfig) "audit nslogPolicy")
+addNSObject "tm global" ($filteredConfig) "tm global"
 
 
 # Get AAA Traffic Actions from AAA Traffic Policies
 if ($NSObjects."tm trafficPolicy") {
-    foreach ($policy in $NSObjects."tm trafficPolicy") {
-        addNSObject "tm trafficAction" (getNSObjects ($config -match " $policy ") "tm trafficAction" -position 4)
-    }
+    $matchExpression = getMatchExpression $NSObjects."tm trafficPolicy"
+    addNSObject "tm trafficAction" (getNSObjects ($config -match " $matchExpression ") "tm trafficAction" -position 4)
 }
 
 
 # Get KCD Accounts and SSO Profiles from AAA Traffic Actions
 if ($NSObjects."tm trafficAction") {
-    foreach ($profile in $NSObjects."tm trafficAction") {
-        addNSObject "aaa kcdAccount" (getNSObjects ($config -match "tm trafficAction $profile ") "aaa kcdAccount" "-kcdAccount")
-        addNSObject "tm formSSOAction" (getNSObjects ($config -match "tm trafficAction $profile ") "tm formSSOAction" "-formSSOAction")
-        addNSObject "tm samlSSOProfile" (getNSObjects ($config -match "tm trafficAction $profile ") "tm samlSSOProfile" "-samlSSOProfile")
-    }
+    $matchExpression = getMatchExpression $NSObjects."tm trafficAction"
+    $filteredConfig = $config -match "tm trafficAction $matchExpression "
+    addNSObject "aaa kcdAccount" (getNSObjects ($filteredConfig) "aaa kcdAccount" "-kcdAccount")
+    addNSObject "tm formSSOAction" (getNSObjects ($filteredConfig) "tm formSSOAction" "-formSSOAction")
+    addNSObject "tm samlSSOProfile" (getNSObjects ($filteredConfig) "tm samlSSOProfile" "-samlSSOProfile")
 }
 
 
