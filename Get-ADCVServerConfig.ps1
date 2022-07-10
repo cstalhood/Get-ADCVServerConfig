@@ -33,6 +33,7 @@ param (
 
 # Change Log
 # ----------
+# 2022 July 10 - added support for * in object names (e.g., *.corp.com)
 # 2021 Nov 4 - performance improvements
 # 2021 Oct 15 - output SAML SSO Actions; performance improvements
 # 2021 Jun 1 - added search "policy expressions" for other appexpert objects
@@ -145,16 +146,21 @@ function printProgress ($origObjects, $NSObjectType) {
     return $newObjects
 }
 
+# returns a regex clause with multiple objects or'd to speed up regex matching
 function getMatchExpression ($Objects) {
     # returns a regex clause with multiple objects or'd to speed up regex matching
     $matchExpression = "("
     foreach ($uniqueObject in $Objects) {
-        $matchExpression += $uniqueObject + "|" 
+        $uniqueObjectDots = $uniqueObject -replace "\.", "\."
+        $uniqueObjectDots = $uniqueObjectDots -replace "\*", "\*"
+        $matchExpression += $uniqueObjectDots + "|" 
     }
     $matchExpression = $matchExpression.Substring(0,$matchExpression.length - 1) + ")"
     return $matchExpression
 }
 
+# searches matches for other objects (e.g., pattern set)
+# then adds all matches to the main matches hash table
 function addNSObject ($NSObjectType, $NSObjectName) {
     if (!$NSObjectName) { return }
     # write-host $NSObjectType $NSObjectName  #Debug
@@ -260,7 +266,6 @@ function addNSObject ($NSObjectType, $NSObjectName) {
             $nsObjects."policy httpCallout" = @($nsObjects."policy httpCallout" | Select-Object -Unique)
         }
 
-        
         # Look for DNS Records
         $foundObjects = getNSObjects $filteredConfig "dns addRec"
         if ($foundObjects) 
@@ -304,7 +309,7 @@ function addNSObject ($NSObjectType, $NSObjectName) {
 }
 
 
-
+# Search for objects of type bound to selected vservers
 function getNSObjects ($matchConfig, $NSObjectType, $paramName, $position) {
     if ($paramName -and !($matchConfig -match $paramName)) {
         return
@@ -335,6 +340,9 @@ function getNSObjects ($matchConfig, $NSObjectType, $paramName, $position) {
         $VIPsAll = $VIPsAll | Where-Object {$_.VIP -ne "0.0.0.0"}
     }
 
+            # if ($NSObjectType -match "ssl certKey") 
+            # { write-host $objectCandidate}
+
     # Strip Comments
     $matchConfig = $matchConfig | ForEach-Object {$_ -replace '-comment ".*?"' }
     
@@ -352,12 +360,11 @@ function getNSObjects ($matchConfig, $NSObjectType, $paramName, $position) {
     $objectMatches = @()
     foreach ($objectCandidate in $objectsAll) {
         
-        # For regex, replace dots with escaped dots
+        # For regex, replace dots with escaped dots and escaped *
         $objectCandidateDots = $objectCandidate -replace "\.", "\."
+        $objectCandidateDots = $objectCandidateDots -replace "\*", "\*"
 
-        # if ($objectCandidate -match "storefront") { write-host $objectCandidate;write-host ($matchConfig);read-host}
-        # if ($NSObjectType -match "ssl certKey") { write-host $objectCandidate;write-host ($matchConfig);read-host}
-        
+       
         # Trying to avoid substring matches
         if ($paramName) { 
             # Compare candidate to term immediately following parameter name
@@ -641,8 +648,9 @@ function outputObjectConfig ($header, $NSObjectKey, $NSObjectType, $explainText)
     } else {    
         foreach ($uniqueObject in $uniqueObjects) {
         
-            # For regex, replace dots with escaped dots
+            # For regex, replace dots with escaped dots and escaped *
             $uniqueObject = $uniqueObject -replace "\.", "\."
+            $uniqueObject = $uniqueObject -replace "\*", "\*"
             
             # Don't match "-" to prevent "add serviceGroup -netProfile"
             # Ensure there's whitespace before match to prevent substring matches (e.g. MyServer matching server)
@@ -1826,6 +1834,9 @@ foreach ($action in $NSObjects."authentication webAuthAction") {
 # Get objects linked to certKeys
 if ($NSObjects."ssl certKey") {
     foreach ($certKey in $NSObjects."ssl certKey") {
+        $certKey = $certKey -replace "\.", "\."
+        $certKey = $certKey -replace "\*", "\*"
+        
         # Get FIPS Keys from SSL Certs
         addNSObject "ssl fipsKey" (getNSObjects ($config -match "add ssl certKey $certKey ") "ssl fipsKey" "-fipsKey")
         
