@@ -33,6 +33,7 @@ param (
 
 # Change Log
 # ----------
+# 2022 Sep 20 - added bot management
 # 2022 July 10 - added support for * in object names (e.g., *.corp.com)
 # 2021 Nov 4 - performance improvements
 # 2021 Oct 15 - output SAML SSO Actions; performance improvements
@@ -509,6 +510,7 @@ function GetLBvServerBindings ($objectsList) {
         addNSObject "appfw policy" (getNSObjects $vserverConfig "appfw policy" "-policyName")
         addNSObject "appfw policylabel" (getNSObjects $vserverConfig "appfw policylabel" "policylabel")
         addNSObject "filter policy" (getNSObjects $vserverConfig "filter policy" "-policyName")
+        addNSObject "bot policy" (getNSObjects $vserverConfig "bot policy")
         addNSObject "transform policy" (getNSObjects $vserverConfig "transform policy" "-policyName")
         addNSObject "transform policylabel" (getNSObjects $vserverConfig "transform policylabel")
         addNSObject "tm trafficPolicy" (getNSObjects $vserverConfig "tm trafficPolicy" "-policyName")
@@ -516,6 +518,7 @@ function GetLBvServerBindings ($objectsList) {
         addNSObject "spillover policy" (getNSObjects $vserverConfig "spillover policy" "-policyName")
         addNSObject "audit syslogPolicy" (getNSObjects $vserverConfig "audit syslogPolicy" "-policyName")
         addNSObject "audit nslogPolicy" (getNSObjects $vserverConfig "audit nslogPolicy" "-policyName")
+        addNSObject "bot policy" (getNSObjects $vserverConfig "bot policy")
         addNSObject "dns profile" (getNSObjects $vserverConfig "dns profile" "-dnsProfileName" )
         addNSObject "ns tcpProfile" (getNSObjects $vserverConfig "ns tcpProfile" "-tcpProfileName")
         addNSObject "ns httpProfile" (getNSObjects $vserverConfig "ns httpProfile" "-httpProfileName")
@@ -2244,6 +2247,36 @@ if ($NSObjects."appfw policy") {
 }
 
 
+# Get Bot Policies from Global Bot Bindings
+addNSObject "bot policy" (getNSObjects ($config -match "bind bot global ") "bot Policy")
+addNSObject "bot policylabel" (getNSObjects ($config -match "bind bot global ") "bot policylabel")
+
+
+# Get Bot Policies from Bot Policy Labels
+if ($NSObjects."bot policylabel") {
+    foreach ($policy in $NSObjects."bot policylabel") {
+        addNSObject "bot policy" (getNSObjects ($config -match " $policy ") "bot policy")
+    }
+}
+
+
+# Get Bot Profiles from Bot Policies
+if ($NSObjects."bot policy") {
+    foreach ($policy in $NSObjects."bot policy") {
+        addNSObject "bot profile" (getNSObjects ($config -match "bot policy $policy ") "bot profile")
+        addNSObject "audit messageaction" (getNSObjects ($config -match "bot policy $policy") "audit messageaction" "-logAction")
+
+    }
+    if ($config -match "enable ns feature.* Bot") {
+        $NSObjects."bot parameter" = @("enable ns feature Bot")
+    } else {
+        $NSObjects."bot parameter" = @("# *** Bot Management feature is not enabled")
+    }
+    addNSObject "bot parameter" ($config -match "set appfw settings") "bot parameter"
+    addNSObject "bot global" ($config -match "bind appfw global ") "bot global"
+}
+
+
 # Get Login Schemas from Login Schema Policies
 if ($NSObjects."authentication loginSchemaPolicy") {
     foreach ($policy in $NSObjects."authentication loginSchemaPolicy") {
@@ -2538,6 +2571,13 @@ if ($NSObjects."appfw profile" ) { outputObjectConfig "AppFW Profiles" "appfw pr
 if ($NSObjects."appfw policy" ) { outputObjectConfig "AppFW Policies" "appfw policy" }
 if ($NSObjects."appfw policylabel" ) { outputObjectConfig "AppFW Policy Labels" "appfw policylabel" }
 if ($NSObjects."appfw global" ) { outputObjectConfig "AppFW Global Bindings" "appfw global" "raw" }
+
+if ($NSObjects."bot parameter" ) { outputObjectConfig "Bot Management Global Settings" "bot parameter" "raw" }
+if ($NSObjects."bot profile" ) { outputObjectConfig "Bot Management Profiles" "bot profile" `
+    -explainText ("Some portions of Bot Profiles are not in the config file.`nManually export/import Signatures Object") }
+if ($NSObjects."bot policy" ) { outputObjectConfig "Bot Management Policies" "bot policy" }
+if ($NSObjects."bot policylabel" ) { outputObjectConfig "Bot Management Policy Labels" "bot policylabel" }
+if ($NSObjects."bot global" ) { outputObjectConfig "Bot Management Global Bindings" "bot global" "raw" }
 
 if ($NSObjects."transform profile" ) { outputObjectConfig "Transform Profiles" "transform profile" }
 if ($NSObjects."transform action" ) { outputObjectConfig "Transform Actions" "transform action" }
