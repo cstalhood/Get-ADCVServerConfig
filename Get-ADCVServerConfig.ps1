@@ -33,6 +33,7 @@ param (
 
 # Change Log
 # ----------
+# 2023 June 30 - added port numbers to VIP list; bug fixes
 # 2022 Sep 20 - added bot management
 # 2022 July 10 - added support for * in object names (e.g., *.corp.com)
 # 2021 Nov 4 - performance improvements
@@ -783,6 +784,12 @@ do {
         for ($x = 1; $x -lt $vservers.length; $x++) {
             $VIPs[$x] = $vserverConfig | select-string -Pattern ('^add \w+ vserver ' + $vservers[$x] + ' \w+ (\d+\.\d+\.\d+\.\d+)') | ForEach-Object {$_.Matches.Groups[1].value}
         }
+
+        # Get Ports for each vServer so they can be displayed to the user
+        $Ports = @("") * ($vservers.length)
+        for ($x = 1; $x -lt $vservers.length; $x++) {
+            $Ports[$x] = $vserverConfig | select-string -Pattern ('^add \w+ vserver ' + $vservers[$x] + ' \w+ \d+\.\d+\.\d+\.\d+ (\d+)') | ForEach-Object {$_.Matches.Groups[1].value}
+        }
 		
 		# Get Enabled/Disabled State for each vServer so they can be displayed to the user
         $States = @("") * ($vservers.length)
@@ -799,6 +806,7 @@ do {
                 Type = $vserverTypes[$x]
                 Name = $vservers[$x]
                 VIP = $VIPs[$x]
+                Port = $Ports[$x]
 				State = $States[$x]
                 }
         }
@@ -943,7 +951,7 @@ if ($nsObjects."sys") {
     addNSObject "ns mode" ($config -match "ns mode")
     addNSObject "system parameter" ($config -match "system parameter")
     addNSObject "ns encryptionParams" ($config -match "set ns encryptionParams")
-    addNSObject "ssl cipher" (getNSObjects $vserverConfig "ssl cipher" "-cipherName")
+    addNSObject "ssl cipher" (getNSObjects $config "ssl cipher" "-cipherName")
     
     # Get Networking Settings
     addNSObject "ns config" ($config -match "ns config")
@@ -1621,18 +1629,6 @@ if ($NSObjects."cs policy") {
 }
 
 
-# Get SSL Objects from SSL vServers
-if ($NSObjects."ssl vserver") {
-    $matchExpression = getMatchExpression $NSObjects."ssl vserver"
-    $filteredConfig = $config -match " ssl vserver $matchExpression "
-    addNSObject "ssl cipher" (getNSObjects ($filteredConfig) "ssl cipher" "-cipherName")
-    addNSObject "ssl certKey" (getNSObjects ($filteredConfig) "ssl certKey" "-certkeyName")
-    addNSObject "ssl certKey" (getNSObjects ($filteredConfig) "ssl certKey" "-cacert")
-    addNSObject "ssl logprofile" (getNSObjects ($filteredConfig) "ssl logprofile" "-ssllogprofile")
-    addNSObject "ssl profile" (getNSObjects ($filteredConfig) "ssl profile" "-sslProfile")
-}
-
-
 
 # Get Next Factors, Authentication Policies and Login Schemas from Authentication Policy Labels
 if ($NSObjects."authentication policylabel") {
@@ -1831,6 +1827,18 @@ foreach ($action in $NSObjects."authentication samlAction") {
 }
 foreach ($action in $NSObjects."authentication webAuthAction") {
     addNSObject "aaa group" (getNSObjects ($config -match "authentication webAuthAction $action ") "aaa group" "-defaultAuthenticationGroup")
+}
+
+
+# Get SSL Objects from SSL vServers
+if ($NSObjects."ssl vserver") {
+    $matchExpression = getMatchExpression $NSObjects."ssl vserver"
+    $filteredConfig = $config -match " ssl vserver $matchExpression "
+    addNSObject "ssl cipher" (getNSObjects ($filteredConfig) "ssl cipher" "-cipherName")
+    addNSObject "ssl certKey" (getNSObjects ($filteredConfig) "ssl certKey" "-certkeyName")
+    addNSObject "ssl certKey" (getNSObjects ($filteredConfig) "ssl certKey" "-cacert")
+    addNSObject "ssl logprofile" (getNSObjects ($filteredConfig) "ssl logprofile" "-ssllogprofile")
+    addNSObject "ssl profile" (getNSObjects ($filteredConfig) "ssl profile" "-sslProfile")
 }
 
 
