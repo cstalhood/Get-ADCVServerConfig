@@ -33,6 +33,7 @@ param (
 
 # Change Log
 # ----------
+# 2024 Sep 25 - added "add monitor" instead of "add lb monitor"
 # 2023 June 30 - added port numbers to VIP list; bug fixes
 # 2022 Sep 20 - added bot management
 # 2022 July 10 - added support for * in object names (e.g., *.corp.com)
@@ -459,6 +460,7 @@ function GetLBvServerBindings ($objectsList) {
                 # wrap config matches in spaces to avoid substring matches
                 $serviceConfig = $config -match " service $serviceMatchExpression "
                 addNSObject "monitor" (getNSObjects $serviceConfig "lb monitor" "-monitorName")
+				addNSObject "monitor" (getNSObjects $serviceConfig "monitor" "-monitorName")
                 addNSObject "server" (getNSObjects $serviceConfig "server")
                 addNSObject "ssl profile" (getNSObjects $serviceConfig "ssl profile")
                 addNSObject "netProfile" (getNSObjects $serviceConfig "netProfile" "-netProfile")
@@ -475,6 +477,7 @@ function GetLBvServerBindings ($objectsList) {
             #foreach ($serviceGroup in $NSObjects.serviceGroup) {
                 $serviceConfig = $config -match " serviceGroup $serviceGrouMatchExpression "
                 addNSObject "monitor" (getNSObjects $serviceConfig "lb monitor" "-monitorName")
+				addNSObject "monitor" (getNSObjects $serviceConfig "monitor" "-monitorName")
                 addNSObject "server" (getNSObjects $serviceConfig "server")
                 addNSObject "ssl profile" (getNSObjects $serviceConfig "ssl profile")
                 addNSObject "netProfile" (getNSObjects $serviceConfig "netProfile" "-netProfile")
@@ -1224,20 +1227,20 @@ if ($NSObjects."cs policy") {
 # Look for Backup GSLB vServers
 if ($nsObjects."gslb vserver") {
     foreach ($gslbvserver in $nsObjects."gslb vserver") {
-        $currentVServers = $nsObjects."gslb vserver"
-        $nsObjects."gslb vserver" = @()   
+#        $currentVServers = $nsObjects."gslb vserver"
+#        $nsObjects."gslb vserver" = @()   
         $vserverConfig = $config -match " $gslbvserver "
         # Backup VServers should be created before Active VServers
         $backupVServers = getNSObjects ($vserverConfig) "gslb vserver" "-backupVServer"
         if ($backupVServers) {
             addNSObject "gslb vserver" ($backupVServers)
-            foreach ($vserver in $currentvservers) {
-                if ($backupVServers -notcontains $vserver) {
-                    addNSObject "gslb vserver" ($vserver)
-                }
-            }
-        } else {
-            $nsObjects."gslb vserver" = $currentVServers
+#            foreach ($vserver in $currentvservers) {
+#                if ($backupVServers -notcontains $vserver) {
+#                    addNSObject "gslb vserver" ($vserver)
+#                }
+#            }
+#        } else {
+#            $nsObjects."gslb vserver" = $currentVServers
         }
     }
 }
@@ -1265,6 +1268,7 @@ if ($nsObjects."gslb vserver") {
             # wrap config matches in spaces to avoid substring matches
             $serviceConfig = $config -match " gslb service $service "
             addNSObject "monitor" (getNSObjects $serviceConfig "lb monitor" "-monitorName")
+			addNSObject "monitor" (getNSObjects $serviceConfig "monitor" "-monitorName")
             addNSObject "server" (getNSObjects $serviceConfig "server")
             addNSObject "ssl profile" (getNSObjects $serviceConfig "ssl profile")
             addNSObject "netProfile" (getNSObjects $serviceConfig "netProfile" "-netProfile")
@@ -1910,7 +1914,7 @@ if ($NSObjects."azure keyvault") {
 # Get Objects linked to Monitors
 if ($NSObjects.monitor) {
     foreach ($monitor in $NSObjects.monitor) {
-        $monitorConfig = $config -match "lb monitor $monitor "
+        $monitorConfig = $config -match " monitor $monitor "
         addNSObject "netProfile" (getNSObjects $monitorConfig "netProfile" "-netProfile")
         addNSObject "ns trafficDomain" (getNSObjects $monitorConfig "ns trafficDomain" "-td")
         addNSObject "aaa kcdAccount" (getNSObjects $monitorConfig "aaa kcdAccount" "-kcdAccount")
